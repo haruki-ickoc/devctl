@@ -35,7 +35,35 @@ func (n *NetworkManager) Exists(name string) (bool, error) {
     return false, nil
 }
 
+// InspectIPAM は指定された Docker ネットワークの Subnet および Gateway 情報を取得します。
+func (n *NetworkManager) InspectIPAM(name string) (subnet string, gateway string, err error) {
+    if n.runner.DryRun {
+        ui.Dim("[dry-run] ネットワーク '%s' の IPAM 設定確認シミュレーション", name)
+        return "", "", nil
+    }
+    out, err := n.runner.RunCommandOutput("", "docker", "network", "inspect", name, "--format", `{{range .IPAM.Config}}{{.Subnet}},{{.Gateway}}{{"\n"}}{{end}}`)
+    if err != nil {
+        return "", "", fmt.Errorf("ネットワーク '%s' の情報取得に失敗しました: %w", name, err)
+    }
+    out = strings.TrimSpace(out)
+    if out == "" {
+        return "", "", nil
+    }
+    lines := strings.Split(out, "\n")
+    if len(lines) > 0 {
+        parts := strings.Split(strings.TrimSpace(lines[0]), ",")
+        if len(parts) >= 1 {
+            subnet = parts[0]
+        }
+        if len(parts) >= 2 {
+            gateway = parts[1]
+        }
+    }
+    return subnet, gateway, nil
+}
+
 // Ensure はネットワークが存在しない場合に自動作成します。
+// 既に存在し、subnet または gateway が指定されている場合は設定値との整合性を確認して警告を出力します。
 func (n *NetworkManager) Ensure(name, driver, subnet, gateway string, attachable bool) error {
     exists, err := n.Exists(name)
     if err != nil {
@@ -43,11 +71,35 @@ func (n *NetworkManager) Ensure(name, driver, subnet, gateway string, attachable
     }
     if exists {
         ui.Success("ネットワーク '%s' は既に存在します。", name)
+        if !n.runner.DryRun && (subnet != "" || gateway != "") {
+            actualSubnet, actualGateway, err := n.InspectIPAM(name)
+            if err == nil {
+                n.warnIfMismatch(name, subnet, gateway, actualSubnet, actualGateway)
+            }
+        }
         return nil
     }
 
     ui.Info("ネットワーク '%s' が見つかりません。作成します...", name)
     return n.Create(name, driver, subnet, gateway, attachable)
+}
+
+func (n *NetworkManager) warnIfMismatch(name, expectedSubnet, expectedGateway, actualSubnet, actualGateway string) {
+    var mismatches []string
+    if expectedSubnet != "" && actualSubnet != "" && expectedSubnet != actualSubnet {
+        mismatches = append(mismatches, fmt.Sprintf("Subnet (設定: %s, 実環境: %s)", expectedSubnet, actualSubnet))
+    }
+    if expectedGateway != "" && actualGateway != "" && expectedGateway != actualGateway {
+        mismatches = append(mismatches, fmt.Sprintf("Gateway (設定: %s, 実環境: %s)", expectedGateway, actualGateway))
+    }
+
+    if len(mismatches) > 0 {
+        ui.Warn("▲ 警告: 既存ネットワーク '%s' の構成が config.yaml の設定と一致していません:", name)
+        for _, m := range mismatches {
+            ui.Warn("    - %s", m)
+        }
+        ui.Warn("  固定IPの競合や接続エラーを防ぐため、再作成する場合は 'devctl network rm' を実行してから再度起動してください。")
+    }
 }
 
 // Create は指定された名前・ドライバ・設定で Docker ネットワークを作成します。

@@ -102,11 +102,60 @@ devctl run catchUper backend-sh
 # ネットワーク、Core、全プロジェクトの稼働状況をまとめて表示
 devctl ps
 
-# 共通ネットワークの個別操作
+# 共通ネットワークの存在・Subnet/Gateway 整合性確認
 devctl network check
+
+# 共通ネットワークの作成・削除
 devctl network create
 devctl network rm
 ```
+
+#### 固定 IP（Static IP）環境の設定ガイドと検証手順
+
+1. **`config.yaml` での共通ネットワーク定義**:
+   固定 IP アドレスを配備するために `subnet` と `gateway` を定義します。
+   ```yaml
+   network:
+     name: "dev-network"
+     driver: "bridge"
+     attachable: true
+     subnet: "172.20.0.0/16"
+     gateway: "172.20.0.1"
+   ```
+
+2. **各プロジェクト側の `compose.yml` での固定 IP 指定**:
+   プロジェクトのサービスに固定 IP を割り当てる際は、共通ネットワークを外部ネットワーク（`external: true`）として参照し、`ipv4_address` を指定します。
+   ```yaml
+   services:
+     web:
+       image: nginx:alpine
+       networks:
+         dev-network:
+           ipv4_address: 172.20.0.10
+
+   networks:
+     dev-network:
+       external: true
+   ```
+
+3. **事前検証と整合性チェック**:
+   `devctl network check` を実行すると、実環境のネットワーク構成と `config.yaml` の設定値（Subnet / Gateway）が一致しているかを自動診断します。
+   ```bash
+   devctl network check
+   ```
+   > **設定不一致時のトラブルシューティング**:
+   > 既にデフォルトの Docker サブネットでネットワークが作成されている場合など、設定値との不一致が検知された際は警告が表示されます。
+   > その場合は `devctl network rm` で既存ネットワークを削除した上で、`devctl network create` または `devctl up` を実行して再作成してください。
+
+4. **コンテナ起動後の動作確認**:
+   プロジェクト起動後、コンテナに指定の IP が割り当てられているか確認できます。
+   ```bash
+   # devctl で起動
+   devctl up web-app
+
+   # 割り当てられた IP アドレスを確認
+   docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <コンテナ名>
+   ```
 
 ### 4. 設定ファイルの管理
 
