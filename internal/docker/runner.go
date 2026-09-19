@@ -9,13 +9,14 @@ import (
 	"github.com/skyou/devctl/internal/ui"
 )
 
-// Runner handles command execution.
+// Runner は OS/Docker コマンドの実行を担当する構造体です。
+// DryRun モードおよび Verbose モードを制御します。
 type Runner struct {
 	DryRun  bool
 	Verbose bool
 }
 
-// NewRunner creates a new command runner.
+// NewRunner は新しい Runner インスタンスを生成します。
 func NewRunner(dryRun, verbose bool) *Runner {
 	return &Runner{
 		DryRun:  dryRun,
@@ -23,17 +24,17 @@ func NewRunner(dryRun, verbose bool) *Runner {
 	}
 }
 
-// RunCommand executes a command in a given working directory with streaming stdout and stderr.
+// RunCommand は指定された作業ディレクトリ内で外部コマンドを実行し、標準出力・標準エラー出力をストリーミングします。
 func (r *Runner) RunCommand(dir string, name string, args ...string) error {
 	fullCmd := fmt.Sprintf("%s %s", name, strings.Join(args, " "))
 	if dir != "" {
-		ui.Dim("[exec] (in %s): %s", dir, fullCmd)
+		ui.Dim("[実行] (作業ディレクトリ: %s): %s", dir, fullCmd)
 	} else {
-		ui.Dim("[exec]: %s", fullCmd)
+		ui.Dim("[実行]: %s", fullCmd)
 	}
 
 	if r.DryRun {
-		ui.Info("[dry-run] Skipped execution of: %s", fullCmd)
+		ui.Info("[dry-run] 実行をシミュレーション（スキップ）: %s", fullCmd)
 		return nil
 	}
 
@@ -48,20 +49,20 @@ func (r *Runner) RunCommand(dir string, name string, args ...string) error {
 	return cmd.Run()
 }
 
-// RunShell runs an arbitrary shell command string inside a specified working directory.
+// RunShell は指定された作業ディレクトリ内でシェルコマンド文字列（sh -c）を実行します。
 func (r *Runner) RunShell(dir, shellCmd string) error {
 	if dir != "" {
-		ui.Dim("[shell] (in %s): %s", dir, shellCmd)
+		ui.Dim("[シェル] (作業ディレクトリ: %s): %s", dir, shellCmd)
 	} else {
-		ui.Dim("[shell]: %s", shellCmd)
+		ui.Dim("[シェル]: %s", shellCmd)
 	}
 
 	if r.DryRun {
-		ui.Info("[dry-run] Skipped execution of: %s", shellCmd)
+		ui.Info("[dry-run] シェル実行をシミュレーション（スキップ）: %s", shellCmd)
 		return nil
 	}
 
-	// Use sh -c to execute compound shell scripts / pipes
+	// パイプや複合コマンドを実行するため sh -c を使用
 	cmd := exec.Command("sh", "-c", shellCmd)
 	if dir != "" {
 		cmd.Dir = dir
@@ -73,10 +74,10 @@ func (r *Runner) RunShell(dir, shellCmd string) error {
 	return cmd.Run()
 }
 
-// RunCommandOutput runs a command and captures its trimmed stdout output.
+// RunCommandOutput はコマンドを実行し、その標準出力を取得して返します。
 func (r *Runner) RunCommandOutput(dir string, name string, args ...string) (string, error) {
 	if r.DryRun {
-		ui.Dim("[dry-run inspect]: %s %s", name, strings.Join(args, " "))
+		ui.Dim("[dry-run 取得]: %s %s", name, strings.Join(args, " "))
 		return "", nil
 	}
 	cmd := exec.Command(name, args...)

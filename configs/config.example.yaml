@@ -1,77 +1,65 @@
-# devctl configuration file example
-# Default lookup path: ~/.config/devctl/config.yaml or current directory .devctl.yaml
+# devctl 設定ファイル例
+# デフォルト検索パス: ~/.config/devctl/config.yaml またはカレントディレクトリの .devctl.yaml
 version: "1"
 
-# Global defaults
+# 全体デフォルト設定
 defaults:
-  compose_cmd: "docker compose" # or "docker-compose"
+  compose_cmd: "docker compose" # または "docker-compose"
   env_file: ".env"
 
-# Shared Docker Network
-# devctl ensures this network exists before starting core services or projects
+# 共通 Docker ネットワーク定義
+# devctl は共通基盤やプロジェクト起動前にこのネットワークの存在を確認し、なければ自動作成します
 network:
-  name: "dev-network"
+  name: "internal-network"
   driver: "bridge"
   attachable: true
 
-# Shared Core Infrastructure Services
-# (Reverse Proxy, Logging, Shared Database, Redis, etc.)
+# 共通インフラ基盤 (Core Services)
+# リバースプロキシ、ログ基盤、共通DB などの横断サービスを管理します
 core:
-  # Path to the directory containing docker-compose.yml for core infrastructure
-  workdir: "~/workspace/core-infra"
+  # 共通基盤 docker-compose.yml / compose.yml が配置されたディレクトリ
+  workdir: "~/workspace/toolbox"
+  # compose_files を省略した場合、compose.yaml / compose.yml / docker-compose.yaml / docker-compose.yml が自動検出されます
   compose_files:
-    - "docker-compose.yml"
+    - "compose.yml"
   env_file: ".env"
   services:
     traefik:
-      description: "Traefik Reverse Proxy & SSL Termination"
-    mailhog:
-      description: "MailHog Local SMTP testing UI"
-    mysql:
-      description: "Shared MySQL Server"
-    redis:
-      description: "Shared Redis Cache"
+      description: "Traefik リバースプロキシ & SSL終端 (http://traefik.localhost)"
+    dbgate:
+      description: "DBGate Webデータベース管理クライアント (http://dbgate.localhost)"
+    dozzle:
+      description: "Dozzle リアルタイムログビューア (http://dozzle.localhost)"
 
-# Managed Projects
+# 管理対象プロジェクト定義
 projects:
-  web-app:
-    description: "Main Web Application (Frontend / Backend)"
-    workdir: "~/workspace/web-app"
+  sample:
+    description: "サンプルアプリケーション環境"
+    workdir: "~/workspace/sample"
     compose_files:
-      - "docker-compose.yml"
-      - "docker-compose.override.yml"
-    env_file: ".env.local"
-    # Dependencies that devctl ensures are up prior to running project
+      - "compose.yml"
+    env_file: ".env"
+    # プロジェクト起動前に準備すべき依存関係
     depends_on:
       network: true
       core:
-        - "mysql"
-        - "redis"
-    # Project-specific custom tasks (replaces Makefile targets)
-    tasks:
-      migrate:
-        description: "Run database migrations"
-        command: "docker compose exec app go run ./cmd/migrate"
-      seed:
-        description: "Seed database with fixture data"
-        command: "docker compose exec app go run ./cmd/seed"
-      bash:
-        description: "Open bash shell in the app container"
-        command: "docker compose exec app sh"
-      logs:
-        description: "Tail application logs"
-        command: "docker compose logs -f app"
+        - "traefik"
 
-  billing-service:
-    description: "Billing & Payment Microservice"
-    workdir: "~/workspace/billing-service"
+  catchUper:
+    description: "catchUper フルスタックWebサービス (Nuxt + Node.js + FastAPI)"
+    workdir: "~/workspace/catchUper"
     compose_files:
       - "docker-compose.yml"
     depends_on:
       network: true
-      core:
-        - "mysql"
+    # プロジェクト固有のカスタムタスク (Makefile 代替)
     tasks:
-      test:
-        description: "Run unit and integration tests"
-        command: "docker compose exec billing go test ./..."
+      logs:
+        description: "全サービスのログをリアルタイム追跡"
+        command: "docker compose logs -f"
+      backend-sh:
+        description: "backend コンテナでシェルを起動"
+        command: "docker compose exec backend sh"
+      scraper-sh:
+        description: "scraper コンテナでシェルを起動"
+        command: "docker compose exec scraper sh"

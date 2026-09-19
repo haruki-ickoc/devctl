@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/skyou/devctl/internal/ui"
 )
@@ -10,24 +8,24 @@ import (
 var networkCmd = &cobra.Command{
 	Use:     "network",
 	Aliases: []string{"net"},
-	Short:   "Manage shared Docker network",
-	Long:    `Inspect, create, or remove the shared Docker network specified in config.yaml.`,
+	Short:   "共通 Docker ネットワークの管理",
+	Long:    `config.yaml で定義された共通 Docker ネットワークの存在確認、手動作成、削除を行います。`,
 }
 
 var networkCheckCmd = &cobra.Command{
 	Use:   "check",
-	Short: "Check if the shared network exists",
+	Short: "共通ネットワークの存在確認",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		netName := cfg.Network.Name
-		ui.Info("Checking network: %s", netName)
+		ui.Info("ネットワークを確認中: %s", netName)
 		exists, err := networkManager.Exists(netName)
 		if err != nil {
 			return err
 		}
 		if exists {
-			ui.Success("Network '%s' exists.", netName)
+			ui.Success("ネットワーク '%s' は存在します。", netName)
 		} else {
-			ui.Warn("Network '%s' DOES NOT exist. Run 'devctl network create' to create it.", netName)
+			ui.Warn("ネットワーク '%s' は存在しません。'devctl network create' で作成できます。", netName)
 		}
 		return nil
 	},
@@ -35,7 +33,7 @@ var networkCheckCmd = &cobra.Command{
 
 var networkCreateCmd = &cobra.Command{
 	Use:   "create",
-	Short: "Create the shared network if missing",
+	Short: "共通ネットワークを作成（未存在時）",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return networkManager.Ensure(cfg.Network.Name, cfg.Network.Driver, cfg.Network.Attachable)
 	},
@@ -44,9 +42,9 @@ var networkCreateCmd = &cobra.Command{
 var networkRmCmd = &cobra.Command{
 	Use:     "rm",
 	Aliases: []string{"remove", "delete"},
-	Short:   "Remove the shared network",
+	Short:   "共通ネットワークを削除",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Printf("Are you sure you want to remove network '%s'? (use caution if containers are connected)\n", cfg.Network.Name)
+		ui.Warn("ネットワーク '%s' を削除します（接続コンテナがある場合は注意してください）", cfg.Network.Name)
 		return networkManager.Remove(cfg.Network.Name)
 	},
 }

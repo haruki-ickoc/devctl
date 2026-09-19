@@ -9,7 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config represents the devctl configuration structure.
+// Config は devctl の全体設定を表す構造体です。
 type Config struct {
 	Version  string                 `yaml:"version"`
 	Defaults DefaultsConfig         `yaml:"defaults"`
@@ -17,24 +17,24 @@ type Config struct {
 	Core     CoreConfig             `yaml:"core"`
 	Projects map[string]ProjectItem `yaml:"projects"`
 
-	// LoadedPath stores the path of the loaded config file
+	// LoadedPath は読み込まれた設定ファイルのパスを保持します
 	LoadedPath string `yaml:"-"`
 }
 
-// DefaultsConfig contains global fallback settings.
+// DefaultsConfig はグローバルのデフォルト設定を定義します。
 type DefaultsConfig struct {
-	ComposeCmd string `yaml:"compose_cmd"` // e.g. "docker compose" or "docker-compose"
-	EnvFile    string `yaml:"env_file"`    // Default env file name
+	ComposeCmd string `yaml:"compose_cmd"` // 例: "docker compose" または "docker-compose"
+	EnvFile    string `yaml:"env_file"`    // デフォルトの環境変数ファイル名
 }
 
-// NetworkConfig defines the shared Docker network.
+// NetworkConfig は共通 Docker ネットワークの定義を表します。
 type NetworkConfig struct {
 	Name       string `yaml:"name"`
 	Driver     string `yaml:"driver"`
 	Attachable bool   `yaml:"attachable"`
 }
 
-// CoreConfig defines the shared infrastructure services.
+// CoreConfig は共通基盤（リバースプロキシ、ログ、共通DB等）の定義を表します。
 type CoreConfig struct {
 	WorkDir      string                 `yaml:"workdir"`
 	ComposeFiles []string               `yaml:"compose_files"`
@@ -42,36 +42,58 @@ type CoreConfig struct {
 	Services     map[string]ServiceItem `yaml:"services"`
 }
 
-// ServiceItem defines metadata for a service inside Core.
+// ServiceItem は Core 内のサービスメタデータを表します。
 type ServiceItem struct {
 	Description string `yaml:"description"`
 }
 
-// ProjectItem represents an individual managed project.
+// ProjectItem は個々の管理対象プロジェクトを表します。
 type ProjectItem struct {
-	Name         string            `yaml:"-"` // Key in map
-	Description  string            `yaml:"description"`
-	WorkDir      string            `yaml:"workdir"`
-	ComposeFiles []string          `yaml:"compose_files"`
-	EnvFile      string            `yaml:"env_file"`
-	DependsOn    DependsOnConfig   `yaml:"depends_on"`
+	Name         string              `yaml:"-"` // マップのキー
+	Description  string              `yaml:"description"`
+	WorkDir      string              `yaml:"workdir"`
+	ComposeFiles []string            `yaml:"compose_files"`
+	EnvFile      string              `yaml:"env_file"`
+	DependsOn    DependsOnConfig     `yaml:"depends_on"`
 	Tasks        map[string]TaskItem `yaml:"tasks"`
 }
 
-// DependsOnConfig defines prerequisite infrastructure for a project.
+// DependsOnConfig はプロジェクト起動に必要な前提インフラ依存を定義します。
 type DependsOnConfig struct {
-	Network bool     `yaml:"network"` // Requires shared network
-	Core    []string `yaml:"core"`    // Specific core services required (or empty for all)
+	Network bool     `yaml:"network"` // 共通ネットワークの存在を要求するか
+	Core    []string `yaml:"core"`    // 依存する Core サービス名（空の場合は不要）
 }
 
-// TaskItem represents custom project commands (absorbing Makefiles).
+// TaskItem はプロジェクト固有のカスタムタスク（Makefile代替コマンド）を定義します。
 type TaskItem struct {
 	Description string `yaml:"description"`
 	Command     string `yaml:"command"`
 }
 
-// Load finds and parses the configuration file.
-// If configPath is empty, it searches default locations.
+// candidateComposeFiles は Compose ファイル自動検出時の候補ファイル名一覧（優先順位順）です。
+var candidateComposeFiles = []string{
+	"compose.yaml",
+	"compose.yml",
+	"docker-compose.yaml",
+	"docker-compose.yml",
+}
+
+// detectComposeFiles は指定された作業ディレクトリ内に存在する Compose ファイルを自動検出します。
+// 見つからない場合は現代の推奨デフォルトである compose.yml を返します。
+func detectComposeFiles(workDir string) []string {
+	if workDir != "" {
+		for _, candidate := range candidateComposeFiles {
+			target := filepath.Join(workDir, candidate)
+			if _, err := os.Stat(target); err == nil {
+				return []string{candidate}
+			}
+		}
+	}
+	return []string{"compose.yml"}
+}
+
+// Load は設定ファイルを探索してパースします。
+// customPath が空文字列の場合は既定の候補パスを自動探索します。
 func Load(customPath string) (*Config, error) {
 	targetPath, err := resolveConfigPath(customPath)
 	if err != nil {
@@ -80,15 +102,15 @@ func Load(customPath string) (*Config, error) {
 
 	data, err := os.ReadFile(targetPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file at %s: %w", targetPath, err)
+		return nil, fmt.Errorf("設定ファイル読み込みに失敗しました (%s): %w", targetPath, err)
 	}
 
-	// Expand environment variables
+	// 環境変数の展開
 	expanded := os.ExpandEnv(string(data))
 
 	var cfg Config
 	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse yaml config: %w", err)
+		return nil, fmt.Errorf("設定ファイルの YAML 構文エラー: %w", err)
 	}
 
 	cfg.LoadedPath = targetPath
@@ -97,18 +119,18 @@ func Load(customPath string) (*Config, error) {
 	return &cfg, nil
 }
 
-// resolveConfigPath determines the config path to load.
+// resolveConfigPath は読み込むべき設定ファイルのパスを解決します。
 func resolveConfigPath(customPath string) (string, error) {
 	if customPath != "" {
 		return ExpandPath(customPath), nil
 	}
 
-	// 1. Check DEVCTL_CONFIG env var
+	// 1. 環境変数 DEVCTL_CONFIG の確認
 	if envPath := os.Getenv("DEVCTL_CONFIG"); envPath != "" {
 		return ExpandPath(envPath), nil
 	}
 
-	// 2. Check current directory
+	// 2. カレントディレクトリの確認
 	candidates := []string{
 		".devctl.yaml",
 		".devctl.yml",
@@ -122,25 +144,25 @@ func resolveConfigPath(customPath string) (string, error) {
 		}
 	}
 
-	// 3. Check ~/.config/devctl/config.yaml
+	// 3. ~/.config/devctl/config.yaml の確認
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
 		defaultPath := filepath.Join(homeDir, ".config", "devctl", "config.yaml")
 		if _, err := os.Stat(defaultPath); err == nil {
 			return defaultPath, nil
 		}
-		// Also check config.yml
+		// config.yml も確認
 		altPath := filepath.Join(homeDir, ".config", "devctl", "config.yml")
 		if _, err := os.Stat(altPath); err == nil {
 			return altPath, nil
 		}
-		return defaultPath, fmt.Errorf("config file not found. Run 'devctl config init' to create one at %s", defaultPath)
+		return defaultPath, fmt.Errorf("設定ファイルが見つかりません。'devctl config init' を実行して初期化してください (%s)", defaultPath)
 	}
 
-	return "", fmt.Errorf("configuration file not found. Please provide --config or create ~/.config/devctl/config.yaml")
+	return "", fmt.Errorf("設定ファイルが見つかりません。--config を指定するか ~/.config/devctl/config.yaml を作成してください")
 }
 
-// DefaultConfigPath returns the canonical default configuration file path (~/.config/devctl/config.yaml).
+// DefaultConfigPath は標準の設定ファイル配置パス (~/.config/devctl/config.yaml) を返します。
 func DefaultConfigPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -149,39 +171,40 @@ func DefaultConfigPath() (string, error) {
 	return filepath.Join(homeDir, ".config", "devctl", "config.yaml"), nil
 }
 
+// applyDefaultsAndResolvePaths は未設定項目へデフォルト値を設定し、パスの解決・Composeファイルの自動検出を行います。
 func (c *Config) applyDefaultsAndResolvePaths() {
 	if c.Defaults.ComposeCmd == "" {
 		c.Defaults.ComposeCmd = "docker compose"
 	}
 	if c.Network.Name == "" {
-		c.Network.Name = "dev-network"
+		c.Network.Name = "internal-network"
 	}
 	if c.Network.Driver == "" {
 		c.Network.Driver = "bridge"
 	}
 
-	// Resolve Core WorkDir
+	// 共通基盤 (Core) のパス解決と Compose ファイル自動検出
 	if c.Core.WorkDir != "" {
 		c.Core.WorkDir = ExpandPath(c.Core.WorkDir)
 	}
 	if len(c.Core.ComposeFiles) == 0 {
-		c.Core.ComposeFiles = []string{"docker-compose.yml"}
+		c.Core.ComposeFiles = detectComposeFiles(c.Core.WorkDir)
 	}
 
-	// Resolve Project WorkDirs
+	// 各プロジェクトのパス解決と Compose ファイル自動検出
 	for name, proj := range c.Projects {
 		proj.Name = name
 		if proj.WorkDir != "" {
 			proj.WorkDir = ExpandPath(proj.WorkDir)
 		}
 		if len(proj.ComposeFiles) == 0 {
-			proj.ComposeFiles = []string{"docker-compose.yml"}
+			proj.ComposeFiles = detectComposeFiles(proj.WorkDir)
 		}
 		c.Projects[name] = proj
 	}
 }
 
-// FindProjectByWorkingDir inspects the current directory and matches it to a registered project if possible.
+// FindProjectByWorkingDir は指定ディレクトリ（通常はカレントディレクトリ）から合致する登録プロジェクトを判定します。
 func (c *Config) FindProjectByWorkingDir(currentDir string) (*ProjectItem, bool) {
 	cleanCurrent, err := filepath.Abs(currentDir)
 	if err != nil {
@@ -196,7 +219,7 @@ func (c *Config) FindProjectByWorkingDir(currentDir string) (*ProjectItem, bool)
 		if err != nil {
 			continue
 		}
-		// Exact match or currentDir is a subpath of project WorkDir
+		// 完全一致、またはカレントディレクトリがプロジェクト作業ディレクトリ配下の場合
 		if cleanCurrent == cleanProj || strings.HasPrefix(cleanCurrent, cleanProj+string(filepath.Separator)) {
 			projCopy := p
 			return &projCopy, true
@@ -205,7 +228,7 @@ func (c *Config) FindProjectByWorkingDir(currentDir string) (*ProjectItem, bool)
 	return nil, false
 }
 
-// ExpandPath expands ~ to the user's home directory and makes the path absolute.
+// ExpandPath はチルダ (~) をユーザーのホームディレクトリに展開し、絶対パスに変換します。
 func ExpandPath(path string) string {
 	if strings.HasPrefix(path, "~/") || path == "~" {
 		homeDir, err := os.UserHomeDir()

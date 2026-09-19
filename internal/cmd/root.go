@@ -21,35 +21,36 @@ var (
 	networkManager *docker.NetworkManager
 )
 
-// RootCmd represents the base command when called without any subcommands
+// RootCmd はサブコマンド未指定時に呼び出されるベースコマンドです。
 var RootCmd = &cobra.Command{
 	Use:   "devctl",
-	Short: "devctl is an integrated multi-project and core infra Docker management CLI",
-	Long: `devctl simplifies managing multi-project Docker Compose environments and
-shared infrastructure (reverse proxy, database, networks, logging, etc.).
-It acts as a single control plane replacing scattered project Makefiles.`,
+	Short: "複数プロジェクトと共通基盤を統合管理する Docker CLI ツール",
+	Long: `devctl は、複数の Docker Compose プロジェクト環境および
+共通インフラ基盤（リバースプロキシ、データベース、ネットワーク、ログ等）を
+単一のコマンド体系から統合管理する CLI ツールです。
+各リポジトリに散在しがちな Makefile の処理を config.yaml へ集約・代替します。`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Initialize runner
+		// ランナーの初期化
 		runner = docker.NewRunner(dryRun, verbose)
 
-		// Commands that do not require an existing config file
+		// 既存設定ファイルを必須としないコマンド群
 		switch cmd.Name() {
 		case "init", "version", "help":
 			return nil
 		}
 
-		// Load config
+		// 設定ファイルのロード
 		var err error
 		cfg, err = config.Load(cfgFile)
 		if err != nil {
-			// If config check or view is called, pass the error along gently
+			// config コマンド配下の実行時はエラーをそのまま渡す
 			if cmd.Parent() != nil && cmd.Parent().Name() == "config" {
 				return nil
 			}
-			return fmt.Errorf("configuration error: %w", err)
+			return fmt.Errorf("設定エラー: %w", err)
 		}
 
-		// Initialize docker clients
+		// Docker クライアント群の初期化
 		composeClient = docker.NewComposeClient(runner, cfg.Defaults.ComposeCmd)
 		networkManager = docker.NewNetworkManager(runner)
 
@@ -57,7 +58,7 @@ It acts as a single control plane replacing scattered project Makefiles.`,
 	},
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
+// Execute はルートコマンドを実行し、フラグを適切に設定します。
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		ui.Error("%v", err)
@@ -66,7 +67,7 @@ func Execute() {
 }
 
 func init() {
-	RootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default is ~/.config/devctl/config.yaml)")
-	RootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
-	RootCmd.PersistentFlags().BoolVarP(&dryRun, "dry-run", "n", false, "preview commands without executing them")
+	RootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "設定ファイルパスを指定 (デフォルト: ~/.config/devctl/config.yaml)")
+	RootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "詳細ログ出力を有効化")
+	RootCmd.PersistentFlags().BoolVarP(&dryRun, "dry-run", "n", false, "コマンドを実行せずにプレビュー表示")
 }

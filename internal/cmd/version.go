@@ -7,15 +7,15 @@ import (
 )
 
 var (
-	// Version is set via ldflags during build
-	Version   = "0.1.0-dev"
+	// Version はビルド時に ldflags で設定されるバージョン情報です
+	Version   = "0.0.2"
 	Commit    = "unknown"
 	BuildDate = "unknown"
 )
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Print devctl version information",
+	Short: "devctl のバージョン・ビルド情報を表示",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("devctl version %s (commit: %s, built: %s)\n", Version, Commit, BuildDate)
 	},

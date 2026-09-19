@@ -15,42 +15,42 @@ var (
 	gray   = color.New(color.FgHiBlack)
 )
 
-// Info prints an informational message with a blue/cyan bullet.
+// Info は情報メッセージを青/シアン色の記号付きで出力します。
 func Info(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	cyan.Print("ℹ ")
 	fmt.Println(msg)
 }
 
-// Success prints a success message with a green checkmark.
+// Success は成功メッセージを緑色のチェックマーク付きで出力します。
 func Success(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	green.Print("✔ ")
 	fmt.Println(msg)
 }
 
-// Warn prints a warning message with a yellow exclamation mark.
+// Warn は警告メッセージを黄色の三角記号付きで出力します。
 func Warn(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	yellow.Print("▲ ")
 	fmt.Println(msg)
 }
 
-// Error prints an error message with a red cross.
+// Error はエラーメッセージを赤色のバツ印付きで標準エラー出力に出力します。
 func Error(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	red.Print("✖ ")
 	fmt.Fprintln(os.Stderr, msg)
 }
 
-// Step prints a section step.
+// Step は処理ステップのセクションヘッダーを出力します。
 func Step(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	cyan.Print("==> ")
 	fmt.Println(msg)
 }
 
-// Dim prints dim/grayed text.
+// Dim は薄い灰色で補足テキストを出力します。
 func Dim(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	gray.Println(msg)

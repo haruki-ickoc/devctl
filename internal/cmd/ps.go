@@ -12,23 +12,23 @@ import (
 var psCmd = &cobra.Command{
 	Use:     "ps",
 	Aliases: []string{"status"},
-	Short:   "Show status of core infrastructure and all managed projects",
+	Short:   "共通基盤および全プロジェクトの稼働ステータスを一覧表示",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// 1. Shared Network Status
-		ui.Step("Shared Network: %s", cfg.Network.Name)
+		// 1. 共通ネットワークのステータス
+		ui.Step("共通ネットワーク: %s", cfg.Network.Name)
 		exists, err := networkManager.Exists(cfg.Network.Name)
 		if err != nil {
-			ui.Warn("Could not check network: %v", err)
+			ui.Warn("ネットワークの確認に失敗しました: %v", err)
 		} else if exists {
-			ui.Success("Status: ACTIVE")
+			ui.Success("ステータス: 稼働中 (ACTIVE)")
 		} else {
-			ui.Warn("Status: NOT CREATED")
+			ui.Warn("ステータス: 未作成 (NOT CREATED)")
 		}
 		fmt.Println()
 
-		// 2. Core Infra Status
+		// 2. 共通基盤 (Core) のステータス
 		if cfg.Core.WorkDir != "" {
-			ui.Step("Core Infrastructure (%s):", cfg.Core.WorkDir)
+			ui.Step("共通基盤 (%s):", cfg.Core.WorkDir)
 			if _, err := os.Stat(cfg.Core.WorkDir); err == nil {
 				opts := docker.ComposeOptions{
 					WorkDir:      cfg.Core.WorkDir,
@@ -37,14 +37,14 @@ var psCmd = &cobra.Command{
 				}
 				_ = composeClient.Ps(opts)
 			} else {
-				ui.Warn("Core workdir not found at %s", cfg.Core.WorkDir)
+				ui.Warn("共通基盤の作業ディレクトリが見つかりません: %s", cfg.Core.WorkDir)
 			}
 			fmt.Println()
 		}
 
-		// 3. Projects Status
+		// 3. 各プロジェクトのステータス
 		for name, proj := range cfg.Projects {
-			ui.Step("Project: %s (%s)", name, proj.WorkDir)
+			ui.Step("プロジェクト: %s (%s)", name, proj.WorkDir)
 			if _, err := os.Stat(proj.WorkDir); err == nil {
 				opts := docker.ComposeOptions{
 					WorkDir:      proj.WorkDir,
@@ -53,7 +53,7 @@ var psCmd = &cobra.Command{
 				}
 				_ = composeClient.Ps(opts)
 			} else {
-				ui.Warn("Project workdir not found at %s", proj.WorkDir)
+				ui.Warn("プロジェクトの作業ディレクトリが見つかりません: %s", proj.WorkDir)
 			}
 			fmt.Println()
 		}

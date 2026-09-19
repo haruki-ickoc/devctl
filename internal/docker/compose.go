@@ -6,13 +6,13 @@ import (
 	"github.com/skyou/devctl/internal/ui"
 )
 
-// ComposeClient handles Docker Compose commands for core infra and projects.
+// ComposeClient は共通基盤およびプロジェクトの Docker Compose コマンド実行を担当します。
 type ComposeClient struct {
 	runner     *Runner
 	composeCmd string
 }
 
-// NewComposeClient creates a new Docker Compose client.
+// NewComposeClient は新しい Docker Compose クライアントを生成します。
 func NewComposeClient(runner *Runner, composeCmd string) *ComposeClient {
 	if composeCmd == "" {
 		composeCmd = "docker compose"
@@ -23,7 +23,7 @@ func NewComposeClient(runner *Runner, composeCmd string) *ComposeClient {
 	}
 }
 
-// ComposeOptions configures compose invocations.
+// ComposeOptions は Compose コマンド実行時のオプションパラメータです。
 type ComposeOptions struct {
 	WorkDir      string
 	ComposeFiles []string
@@ -32,7 +32,7 @@ type ComposeOptions struct {
 	ExtraArgs    []string
 }
 
-// buildBaseArgs builds the base command and arguments for docker compose.
+// buildBaseArgs は docker compose の基本コマンドと引数リストを構築します。
 func (c *ComposeClient) buildBaseArgs(opts ComposeOptions) (string, []string) {
 	cmdParts := strings.Fields(c.composeCmd)
 	bin := cmdParts[0]
@@ -49,7 +49,7 @@ func (c *ComposeClient) buildBaseArgs(opts ComposeOptions) (string, []string) {
 	return bin, args
 }
 
-// Up starts services in detached mode.
+// Up はサービスをバックグラウンド（デタッチドモード）で起動します。
 func (c *ComposeClient) Up(opts ComposeOptions, build bool) error {
 	bin, baseArgs := c.buildBaseArgs(opts)
 	args := append(baseArgs, "up", "-d")
@@ -59,11 +59,11 @@ func (c *ComposeClient) Up(opts ComposeOptions, build bool) error {
 	args = append(args, opts.Services...)
 	args = append(args, opts.ExtraArgs...)
 
-	ui.Step("Starting containers in %s...", opts.WorkDir)
+	ui.Step("%s でコンテナを起動中...", opts.WorkDir)
 	return c.runner.RunCommand(opts.WorkDir, bin, args...)
 }
 
-// Down stops and removes containers.
+// Down はコンテナおよびリソースを停止・削除します。
 func (c *ComposeClient) Down(opts ComposeOptions, removeVolumes bool) error {
 	bin, baseArgs := c.buildBaseArgs(opts)
 	args := append(baseArgs, "down")
@@ -72,22 +72,22 @@ func (c *ComposeClient) Down(opts ComposeOptions, removeVolumes bool) error {
 	}
 	args = append(args, opts.ExtraArgs...)
 
-	ui.Step("Stopping containers in %s...", opts.WorkDir)
+	ui.Step("%s でコンテナを停止中...", opts.WorkDir)
 	return c.runner.RunCommand(opts.WorkDir, bin, args...)
 }
 
-// Restart restarts services.
+// Restart はサービスを再起動します。
 func (c *ComposeClient) Restart(opts ComposeOptions) error {
 	bin, baseArgs := c.buildBaseArgs(opts)
 	args := append(baseArgs, "restart")
 	args = append(args, opts.Services...)
 	args = append(args, opts.ExtraArgs...)
 
-	ui.Step("Restarting containers in %s...", opts.WorkDir)
+	ui.Step("%s でコンテナを再起動中...", opts.WorkDir)
 	return c.runner.RunCommand(opts.WorkDir, bin, args...)
 }
 
-// Logs displays or follows service logs.
+// Logs はサービスのログを表示またはリアルタイム追跡します。
 func (c *ComposeClient) Logs(opts ComposeOptions, follow bool, tail string) error {
 	bin, baseArgs := c.buildBaseArgs(opts)
 	args := append(baseArgs, "logs")
@@ -103,7 +103,7 @@ func (c *ComposeClient) Logs(opts ComposeOptions, follow bool, tail string) erro
 	return c.runner.RunCommand(opts.WorkDir, bin, args...)
 }
 
-// Ps lists running containers in the specified compose environment.
+// Ps は指定された Compose 環境で稼働中のコンテナ一覧を表示します。
 func (c *ComposeClient) Ps(opts ComposeOptions) error {
 	bin, baseArgs := c.buildBaseArgs(opts)
 	args := append(baseArgs, "ps")
@@ -112,7 +112,7 @@ func (c *ComposeClient) Ps(opts ComposeOptions) error {
 	return c.runner.RunCommand(opts.WorkDir, bin, args...)
 }
 
-// Exec executes a command inside a running container.
+// Exec は稼働中のコンテナ内でコマンドを実行します。
 func (c *ComposeClient) Exec(opts ComposeOptions, service string, cmd []string) error {
 	bin, baseArgs := c.buildBaseArgs(opts)
 	args := append(baseArgs, "exec", service)
@@ -121,7 +121,7 @@ func (c *ComposeClient) Exec(opts ComposeOptions, service string, cmd []string) 
 	return c.runner.RunCommand(opts.WorkDir, bin, args...)
 }
 
-// Run executes a one-off command on a service.
+// Run はサービス上でワンオフコマンドを実行します。
 func (c *ComposeClient) Run(opts ComposeOptions, service string, cmd []string) error {
 	bin, baseArgs := c.buildBaseArgs(opts)
 	args := append(baseArgs, "run", "--rm", service)
@@ -130,8 +130,8 @@ func (c *ComposeClient) Run(opts ComposeOptions, service string, cmd []string) e
 	return c.runner.RunCommand(opts.WorkDir, bin, args...)
 }
 
-// RunShellTask executes a custom task defined in config (replaces Makefile target).
+// RunShellTask は設定ファイルで定義されたカスタムタスク（Makefile代替処理）を実行します。
 func (c *ComposeClient) RunShellTask(workDir, shellCommand string) error {
-	ui.Step("Running custom task: %s", shellCommand)
+	ui.Step("カスタムタスクを実行中: %s", shellCommand)
 	return c.runner.RunShell(workDir, shellCommand)
 }
