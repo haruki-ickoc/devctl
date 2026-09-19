@@ -1,0 +1,77 @@
+# devctl configuration file example
+# Default lookup path: ~/.config/devctl/config.yaml or current directory .devctl.yaml
+version: "1"
+
+# Global defaults
+defaults:
+  compose_cmd: "docker compose" # or "docker-compose"
+  env_file: ".env"
+
+# Shared Docker Network
+# devctl ensures this network exists before starting core services or projects
+network:
+  name: "dev-network"
+  driver: "bridge"
+  attachable: true
+
+# Shared Core Infrastructure Services
+# (Reverse Proxy, Logging, Shared Database, Redis, etc.)
+core:
+  # Path to the directory containing docker-compose.yml for core infrastructure
+  workdir: "~/workspace/core-infra"
+  compose_files:
+    - "docker-compose.yml"
+  env_file: ".env"
+  services:
+    traefik:
+      description: "Traefik Reverse Proxy & SSL Termination"
+    mailhog:
+      description: "MailHog Local SMTP testing UI"
+    mysql:
+      description: "Shared MySQL Server"
+    redis:
+      description: "Shared Redis Cache"
+
+# Managed Projects
+projects:
+  web-app:
+    description: "Main Web Application (Frontend / Backend)"
+    workdir: "~/workspace/web-app"
+    compose_files:
+      - "docker-compose.yml"
+      - "docker-compose.override.yml"
+    env_file: ".env.local"
+    # Dependencies that devctl ensures are up prior to running project
+    depends_on:
+      network: true
+      core:
+        - "mysql"
+        - "redis"
+    # Project-specific custom tasks (replaces Makefile targets)
+    tasks:
+      migrate:
+        description: "Run database migrations"
+        command: "docker compose exec app go run ./cmd/migrate"
+      seed:
+        description: "Seed database with fixture data"
+        command: "docker compose exec app go run ./cmd/seed"
+      bash:
+        description: "Open bash shell in the app container"
+        command: "docker compose exec app sh"
+      logs:
+        description: "Tail application logs"
+        command: "docker compose logs -f app"
+
+  billing-service:
+    description: "Billing & Payment Microservice"
+    workdir: "~/workspace/billing-service"
+    compose_files:
+      - "docker-compose.yml"
+    depends_on:
+      network: true
+      core:
+        - "mysql"
+    tasks:
+      test:
+        description: "Run unit and integration tests"
+        command: "docker compose exec billing go test ./..."
