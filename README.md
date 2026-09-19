@@ -107,8 +107,15 @@ devctl network rm
 
 ### 4. 設定ファイルの管理
 ```bash
-# デフォルト設定ファイル (~/.config/devctl/config.yaml) を生成
+# 汎用サンプル設定ファイル (~/.config/devctl/config.yaml) を生成
 devctl config init
+
+# チーム等で配布された既存設定ファイルをインポート配置（構文検証付き）
+devctl config init ./shared-config.yaml
+devctl config init --from ./configs/team.yaml
+
+# 既存の設定ファイルを強制上書き
+devctl config init ./shared-config.yaml -f
 
 # 現在読み込まれている設定ファイルパスを表示
 devctl config path

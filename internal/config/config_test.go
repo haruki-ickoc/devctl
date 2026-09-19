@@ -117,3 +117,61 @@ func TestFindProjectByWorkingDir(t *testing.T) {
 		t.Errorf("無関係のディレクトリでプロジェクトが検出されてしまいました: %v", proj)
 	}
 }
+
+func TestValidateFile(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// 1. 正常な devctl 設定ファイル
+	validYAML := `version: "1"
+defaults:
+  compose_cmd: "docker compose"
+network:
+  name: "custom-net"
+`
+	validPath := filepath.Join(tempDir, "valid.yaml")
+	if err := os.WriteFile(validPath, []byte(validYAML), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := ValidateFile(validPath)
+	if err != nil {
+		t.Fatalf("正常な設定ファイルでエラーが発生しました: %v", err)
+	}
+	if cfg.Network.Name != "custom-net" {
+		t.Errorf("Network.Name の期待値は 'custom-net' ですが、%s でした", cfg.Network.Name)
+	}
+
+	// 2. YAML 構文不正ファイル
+	invalidYAML := `version: "1"
+defaults:
+  - invalid list instead of map
+    broken syntax:
+`
+	invalidPath := filepath.Join(tempDir, "invalid.yaml")
+	if err := os.WriteFile(invalidPath, []byte(invalidYAML), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ValidateFile(invalidPath); err == nil {
+		t.Errorf("構文不正ファイルでエラーが発生しませんでした")
+	}
+
+	// 3. version フィールドがないファイル
+	noVersionYAML := `network:
+  name: "foo"
+`
+	noVersionPath := filepath.Join(tempDir, "no_version.yaml")
+	if err := os.WriteFile(noVersionPath, []byte(noVersionYAML), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ValidateFile(noVersionPath); err == nil {
+		t.Errorf("version フィールドが存在しないファイルでエラーが発生しませんでした")
+	}
+
+	// 4. 存在しないファイル
+	if _, err := ValidateFile(filepath.Join(tempDir, "not_exist.yaml")); err == nil {
+		t.Errorf("存在しないファイルでエラーが発生しませんでした")
+	}
+}
+

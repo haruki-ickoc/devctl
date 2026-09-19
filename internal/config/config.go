@@ -92,17 +92,12 @@ func detectComposeFiles(workDir string) []string {
 	return []string{"compose.yml"}
 }
 
-// Load は設定ファイルを探索してパースします。
-// customPath が空文字列の場合は既定の候補パスを自動探索します。
-func Load(customPath string) (*Config, error) {
-	targetPath, err := resolveConfigPath(customPath)
-	if err != nil {
-		return nil, err
-	}
-
+// ValidateFile は指定されたパスの設定ファイルを読み込み、YAML 構文および設定構造の正当性を検証します。
+func ValidateFile(filePath string) (*Config, error) {
+	targetPath := ExpandPath(filePath)
 	data, err := os.ReadFile(targetPath)
 	if err != nil {
-		return nil, fmt.Errorf("設定ファイル読み込みに失敗しました (%s): %w", targetPath, err)
+		return nil, fmt.Errorf("設定ファイルの読み込みに失敗しました (%s): %w", targetPath, err)
 	}
 
 	// 環境変数の展開
@@ -113,10 +108,25 @@ func Load(customPath string) (*Config, error) {
 		return nil, fmt.Errorf("設定ファイルの YAML 構文エラー: %w", err)
 	}
 
+	if cfg.Version == "" {
+		return nil, fmt.Errorf("devctl 設定ファイルとして無効です ('version' フィールドが必要です)")
+	}
+
 	cfg.LoadedPath = targetPath
 	cfg.applyDefaultsAndResolvePaths()
 
 	return &cfg, nil
+}
+
+// Load は設定ファイルを探索してパースします。
+// customPath が空文字列の場合は既定の候補パスを自動探索します。
+func Load(customPath string) (*Config, error) {
+	targetPath, err := resolveConfigPath(customPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return ValidateFile(targetPath)
 }
 
 // resolveConfigPath は読み込むべき設定ファイルのパスを解決します。

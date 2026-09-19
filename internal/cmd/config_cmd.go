@@ -47,18 +47,46 @@ var configViewCmd = &cobra.Command{
 	},
 }
 
+var (
+	configInitFrom  string
+	configInitForce bool
+)
+
 var configInitCmd = &cobra.Command{
-	Use:   "init",
-	Short: "~/.config/devctl/config.yaml にデフォルト設定ファイルを生成",
+	Use:   "init [source-file]",
+	Short: "devctl 設定ファイルの初期化または既存設定ファイルのインポート",
+	Long: `~/.config/devctl/config.yaml に設定ファイルを生成または配置します。
+
+以下の2つの機能に対応しています:
+  1. 汎用サンプルの初期配置:
+     引数を指定せずに実行すると、汎用的なサンプル設定（DefaultConfigYAML）を配置します。
+  2. 既存設定ファイルのインポート:
+     チーム等で配布された設定ファイルを引数（または --from）で指定すると、構文検証を行った上で配置します。`,
+	Example: `  # 汎用サンプル設定を新規生成
+  devctl config init
+
+  # 配布された設定ファイルを指定して配置
+  devctl config init ./shared-config.yaml
+  devctl config init --from ./configs/team.yaml
+
+  # 既存設定ファイルを強制上書き
+  devctl config init ./shared-config.yaml -f`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		destPath, err := config.DefaultConfigPath()
 		if err != nil {
 			return err
 		}
 
-		if _, err := os.Stat(destPath); err == nil {
+		// インポート元の指定判定（引数または --from フラグ）
+		sourcePath := configInitFrom
+		if len(args) > 0 {
+			sourcePath = args[0]
+		}
+
+		// 既に配置先ファイルが存在するか確認
+		if _, err := os.Stat(destPath); err == nil && !configInitForce {
 			ui.Warn("設定ファイルは既に存在します: %s", destPath)
-			ui.Info("上書きする場合は、既存のファイルを手動で削除または編集してください。")
+			ui.Info("上書きして再配置する場合は --force (-f) フラグを指定してください。")
 			return nil
 		}
 
@@ -67,12 +95,39 @@ var configInitCmd = &cobra.Command{
 			return fmt.Errorf("ディレクトリ %s の作成に失敗しました: %w", dir, err)
 		}
 
+		if sourcePath != "" {
+			// モード1: 既存設定ファイルの検証とコピー配置
+			resolvedSource := config.ExpandPath(sourcePath)
+			if _, err := os.Stat(resolvedSource); os.IsNotExist(err) {
+				return fmt.Errorf("指定された設定ファイルが見つかりません: %s", sourcePath)
+			}
+
+			// YAML 構文および構造の事前バリデーション
+			if _, err := config.ValidateFile(resolvedSource); err != nil {
+				return fmt.Errorf("指定された設定ファイルの構文検証に失敗しました: %w", err)
+			}
+
+			data, err := os.ReadFile(resolvedSource)
+			if err != nil {
+				return fmt.Errorf("設定ファイルの読み込みに失敗しました: %w", err)
+			}
+
+			if err := os.WriteFile(destPath, data, 0644); err != nil {
+				return fmt.Errorf("設定ファイルの配置に失敗しました: %w", err)
+			}
+
+			ui.Success("指定された設定ファイル (%s) を正常に配置しました: %s", sourcePath, destPath)
+			ui.Info("'devctl config check' を実行してパスや構成を検証してください。")
+			return nil
+		}
+
+		// モード2: 汎用サンプルの初期生成
 		if err := os.WriteFile(destPath, []byte(config.DefaultConfigYAML), 0644); err != nil {
 			return fmt.Errorf("デフォルト設定ファイルの書き込みに失敗しました: %w", err)
 		}
 
-		ui.Success("デフォルト設定ファイルを初期化しました: %s", destPath)
-		ui.Info("環境に合わせてこのファイルを編集してください。")
+		ui.Success("汎用サンプル設定ファイルを初期化しました: %s", destPath)
+		ui.Info("各開発環境に合わせてこのファイル (%s) を編集してください。", destPath)
 		return nil
 	},
 }
@@ -147,4 +202,7 @@ func init() {
 	configCmd.AddCommand(configViewCmd)
 	configCmd.AddCommand(configInitCmd)
 	configCmd.AddCommand(configCheckCmd)
+
+	configInitCmd.Flags().StringVar(&configInitFrom, "from", "", "配置元の設定ファイルパスを指定")
+	configInitCmd.Flags().BoolVarP(&configInitForce, "force", "f", false, "既存ファイルが存在する場合でも強制上書き")
 }
