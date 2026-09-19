@@ -36,7 +36,7 @@ func (n *NetworkManager) Exists(name string) (bool, error) {
 }
 
 // Ensure はネットワークが存在しない場合に自動作成します。
-func (n *NetworkManager) Ensure(name, driver string, attachable bool) error {
+func (n *NetworkManager) Ensure(name, driver, subnet, gateway string, attachable bool) error {
     exists, err := n.Exists(name)
     if err != nil {
         return err
@@ -47,17 +47,23 @@ func (n *NetworkManager) Ensure(name, driver string, attachable bool) error {
     }
 
     ui.Info("ネットワーク '%s' が見つかりません。作成します...", name)
-    return n.Create(name, driver, attachable)
+    return n.Create(name, driver, subnet, gateway, attachable)
 }
 
 // Create は指定された名前・ドライバ・設定で Docker ネットワークを作成します。
-func (n *NetworkManager) Create(name, driver string, attachable bool) error {
+func (n *NetworkManager) Create(name, driver, subnet, gateway string, attachable bool) error {
     args := []string{"network", "create"}
     if driver != "" {
         args = append(args, "--driver", driver)
     }
     if attachable {
         args = append(args, "--attachable")
+    }
+    if subnet != "" {
+        args = append(args, "--subnet", subnet)
+    }
+    if gateway != "" {
+        args = append(args, "--gateway", gateway)
     }
     args = append(args, name)
 

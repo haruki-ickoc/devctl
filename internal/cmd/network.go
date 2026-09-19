@@ -35,7 +35,7 @@ var networkCreateCmd = &cobra.Command{
     Use:   "create",
     Short: "共通ネットワークを作成（未存在時）",
     RunE: func(cmd *cobra.Command, args []string) error {
-        return networkManager.Ensure(cfg.Network.Name, cfg.Network.Driver, cfg.Network.Attachable)
+        return networkManager.Ensure(cfg.Network.Name, cfg.Network.Driver, cfg.Network.Subnet, cfg.Network.Gateway, cfg.Network.Attachable)
     },
 }
 

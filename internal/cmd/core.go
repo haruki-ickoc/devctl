@@ -37,7 +37,7 @@ var coreUpCmd = &cobra.Command{
 
         // 共通ネットワークの存在を事前に担保
         if cfg.Network.Name != "" {
-            if err := networkManager.Ensure(cfg.Network.Name, cfg.Network.Driver, cfg.Network.Attachable); err != nil {
+            if err := networkManager.Ensure(cfg.Network.Name, cfg.Network.Driver, cfg.Network.Subnet, cfg.Network.Gateway, cfg.Network.Attachable); err != nil {
                 return fmt.Errorf("共通ネットワークの準備に失敗しました: %w", err)
             }
         }
@@ -149,7 +149,7 @@ func init() {
     coreCmd.AddCommand(coreLogsCmd)
 
     coreUpCmd.Flags().BoolVarP(&coreBuild, "build", "b", false, "起動前にイメージをビルド")
-    coreDownCmd.Flags().BoolVarP(&coreRemoveVolumes, "volumes", "v", false, "名前付きボリュームも同時に削除")
+    coreDownCmd.Flags().BoolVarP(&coreRemoveVolumes, "volumes", "V", false, "名前付きボリュームも同時に削除")
     coreLogsCmd.Flags().BoolVarP(&coreFollowLogs, "follow", "f", false, "ログ出力をリアルタイム追跡")
     coreLogsCmd.Flags().StringVarP(&coreTailLogs, "tail", "t", "100", "末尾から表示する行数")
 }

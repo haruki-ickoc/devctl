@@ -17,6 +17,9 @@ network:
   name: "dev-network"
   driver: "bridge"
   attachable: true
+  # 固定IP（Static IP）サポート用（省略時はDockerのデフォルトが適用されます）
+  # subnet: "172.20.0.0/16"
+  # gateway: "172.20.0.1"
 
 # 共通インフラ基盤 (Core Services)
 # リバースプロキシ、ログ基盤、共通DB、Redis などの横断サービスを管理します

@@ -58,7 +58,7 @@ func resolveTargetProject(args []string) (*config.ProjectItem, []string, error) 
 // prepareDependencies はプロジェクトが依存する共通ネットワークや Core サービスの起動状態を事前に確保します。
 func prepareDependencies(proj *config.ProjectItem) error {
     if proj.DependsOn.Network {
-        if err := networkManager.Ensure(cfg.Network.Name, cfg.Network.Driver, cfg.Network.Attachable); err != nil {
+        if err := networkManager.Ensure(cfg.Network.Name, cfg.Network.Driver, cfg.Network.Subnet, cfg.Network.Gateway, cfg.Network.Attachable); err != nil {
             return fmt.Errorf("%s の共通ネットワーク準備に失敗しました: %w", proj.Name, err)
         }
     }
@@ -364,7 +364,7 @@ func init() {
 
     downFlags := []*cobra.Command{projectDownCmd, topDownCmd}
     for _, f := range downFlags {
-        f.Flags().BoolVarP(&projectRemoveVolumes, "volumes", "v", false, "名前付きボリュームも同時に削除")
+        f.Flags().BoolVarP(&projectRemoveVolumes, "volumes", "V", false, "名前付きボリュームも同時に削除")
     }
 
     logFlags := []*cobra.Command{projectLogsCmd, topLogsCmd}

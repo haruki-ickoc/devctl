@@ -127,6 +127,8 @@ defaults:
   compose_cmd: "docker compose"
 network:
   name: "custom-net"
+  subnet: "172.20.0.0/16"
+  gateway: "172.20.0.1"
 `
     validPath := filepath.Join(tempDir, "valid.yaml")
     if err := os.WriteFile(validPath, []byte(validYAML), 0644); err != nil {
@@ -139,6 +141,12 @@ network:
     }
     if cfg.Network.Name != "custom-net" {
         t.Errorf("Network.Name の期待値は 'custom-net' ですが、%s でした", cfg.Network.Name)
+    }
+    if cfg.Network.Subnet != "172.20.0.0/16" {
+        t.Errorf("Network.Subnet の期待値は '172.20.0.0/16' ですが、%s でした", cfg.Network.Subnet)
+    }
+    if cfg.Network.Gateway != "172.20.0.1" {
+        t.Errorf("Network.Gateway の期待値は '172.20.0.1' ですが、%s でした", cfg.Network.Gateway)
     }
 
     // 2. YAML 構文不正ファイル

@@ -32,6 +32,8 @@ type NetworkConfig struct {
     Name       string `yaml:"name"`
     Driver     string `yaml:"driver"`
     Attachable bool   `yaml:"attachable"`
+    Subnet     string `yaml:"subnet"`
+    Gateway    string `yaml:"gateway"`
 }
 
 // CoreConfig は共通基盤（リバースプロキシ、ログ、共通DB等）の定義を表します。
