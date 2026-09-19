@@ -44,6 +44,7 @@ devctl/
 │   └── config.example.yaml      # 設定ファイル仕様サンプル
 ├── examples/                    # 実動サンプルプロジェクト
 │   └── sample/                  # サンプル環境 (Laravel + MySQL, マルチネットワーク構成)
+├── scripts/                     # 配布・運用スクリプト (install.sh 等)
 ├── Makefile                     # ビルド・クロスコンパイル用
 ├── go.mod
 └── go.sum
@@ -229,20 +230,59 @@ devctl config check
 
 ---
 
-## クイックスタート & ビルド
+## インストール & クイックスタート
+
+### 1. ワンライナー・インストール（推奨）
+
+Linux および macOS（Intel / Apple Silicon）環境に対応しています。コマンド 1 行で最新の単一バイナリが `~/.local/bin/devctl` に配置されます。
 
 ```bash
-# ビルド (bin/devctl が生成されます)
-make build
+curl -fsSL https://raw.githubusercontent.com/skyou/devctl/main/scripts/install.sh | bash
+```
 
-# ~/.local/bin/devctl にインストール
+> ※ 特定のバージョンを指定してインストールする場合:
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/skyou/devctl/main/scripts/install.sh | VERSION=v0.1.0 bash
+> ```
+
+### 2. GitHub Releases からの直接ダウンロード
+
+[GitHub Releases](https://github.com/skyou/devctl/releases) からご利用環境に合わせた単一バイナリを直接ダウンロードして配置できます。
+
+| プラットフォーム | アーキテクチャ | ダウンロード対象ファイル名 |
+| :--- | :--- | :--- |
+| **Linux** | x86_64 / amd64 | `devctl-linux-amd64` |
+| **Linux** | ARM64 / aarch64 | `devctl-linux-arm64` |
+| **macOS** | Intel (amd64) | `devctl-darwin-amd64` |
+| **macOS** | Apple Silicon (arm64) | `devctl-darwin-arm64` |
+| **Windows** | x86_64 / amd64 | `devctl-windows-amd64.exe` |
+
+```bash
+# 例: Linux (amd64) で手動ダウンロードする場合
+mkdir -p ~/.local/bin
+curl -Lo ~/.local/bin/devctl https://github.com/skyou/devctl/releases/latest/download/devctl-linux-amd64
+chmod +x ~/.local/bin/devctl
+```
+
+### 3. ソースからのビルド（Go 開発環境がある場合）
+
+```bash
+git clone https://github.com/skyou/devctl.git
+cd devctl
 make install
+```
 
-# 設定ファイルのひな形を作成
+### 4. 初期セットアップ
+
+```bash
+# 設定ファイルのひな形 (~/.config/devctl/config.yaml) を生成
 devctl config init
 
-# 設定ファイルのパスを確認・編集
+# 現在読み込まれている設定ファイルパスの確認
 devctl config path
+
+# 設定ファイルの構文および各ディレクトリ・compose ファイルの存在チェック
+devctl config check
 ```
 
 ---

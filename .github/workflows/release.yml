@@ -1,0 +1,63 @@
+name: Release
+
+on:
+    push:
+        tags:
+            - "v*.*.*"
+
+permissions:
+    contents: write
+
+jobs:
+    build-and-release:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version-file: "go.mod"
+
+            - name: Run tests
+              run: |
+                  go test -v ./...
+
+            - name: Build release binaries
+              run: |
+                  VERSION=${GITHUB_REF_NAME}
+                  COMMIT=$(git rev-parse --short HEAD)
+                  BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+                  LDFLAGS="-s -w -X github.com/skyou/devctl/internal/cmd.Version=${VERSION} -X github.com/skyou/devctl/internal/cmd.Commit=${COMMIT} -X github.com/skyou/devctl/internal/cmd.BuildDate=${BUILD_DATE}"
+
+                  mkdir -p dist
+
+                  TARGETS=(
+                      "linux/amd64/devctl-linux-amd64"
+                      "linux/arm64/devctl-linux-arm64"
+                      "darwin/amd64/devctl-darwin-amd64"
+                      "darwin/arm64/devctl-darwin-arm64"
+                      "windows/amd64/devctl-windows-amd64.exe"
+                  )
+
+                  for target in "${TARGETS[@]}"; do
+                      IFS="/" read -r os arch name <<< "$target"
+                      echo "Building ${name} (${os}/${arch})..."
+                      GOOS=${os} GOARCH=${arch} CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o "dist/${name}" ./cmd/devctl
+                  done
+
+                  cd dist
+                  sha256sum devctl-* > checksums.txt
+                  cat checksums.txt
+
+            - name: Create GitHub Release
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  gh release create "${GITHUB_REF_NAME}" \
+                      --title "${GITHUB_REF_NAME}" \
+                      --generate-notes \
+                      dist/*
