@@ -2,6 +2,7 @@
 title: v{{TARGET_VERSION}}-plan
 target_version: {{TARGET_VERSION}}
 status: planned # planned | in-progress | completed
+author: "haruki-ickoc <https://github.com/haruki-ickoc>"
 created: {{YYYY-MM-DD}}
 updated: {{YYYY-MM-DD}}
 type: change-request

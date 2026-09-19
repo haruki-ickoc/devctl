@@ -1,6 +1,7 @@
 ---
 name: release-manager
 description: planの受け入れ基準を確認し、verify.shを実行してリリースノートを確定させるリリース監査専任エージェント。
+author: "haruki-ickoc <https://github.com/haruki-ickoc>"
 tools:
   - bash
   - readFile

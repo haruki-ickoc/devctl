@@ -1,3 +1,9 @@
+---
+title: AGENTS
+description: devctl プロジェクトのエージェント開発規約と概要
+author: "haruki-ickoc <https://github.com/haruki-ickoc>"
+---
+
 # プロジェクト概要
 
 このリポジトリは、複数の Docker Compose 環境および共通基盤を横断管理する Go 言語製 CLI ツール「devctl」です。

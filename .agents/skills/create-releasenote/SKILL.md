@@ -1,6 +1,7 @@
 ---
 name: create-releasenote
 description: planファイルに定義された要求仕様の完了検証を行い、検証ログを含めたリリースノート（v<バージョン>-released.md）を生成してplanのステータスを更新します。
+author: "haruki-ickoc <https://github.com/haruki-ickoc>"
 ---
 
 # スキル: リリースノート生成と計画完了処理

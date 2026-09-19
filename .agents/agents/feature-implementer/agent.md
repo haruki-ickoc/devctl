@@ -1,6 +1,7 @@
 ---
 name: feature-implementer
 description: planファイルに書かれた要求仕様を読み解き、Goの設計規約に従って最小限のコード修正を自律的に進める実装専任エージェント。
+author: "haruki-ickoc <https://github.com/haruki-ickoc>"
 tools:
   - readFile
   - writeFile

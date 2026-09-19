@@ -2,6 +2,7 @@
 title: v{{TARGET_VERSION}}-released
 description: {{今回の変更概要を1〜2文で簡潔に記載}}
 version: {{TARGET_VERSION}}
+author: "haruki-ickoc <https://github.com/haruki-ickoc>"
 type: releasenote
 created: {{YYYY-MM-DD}}
 updated: {{YYYY-MM-DD}}

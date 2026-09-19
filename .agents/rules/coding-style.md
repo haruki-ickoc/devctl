@@ -1,3 +1,9 @@
+---
+title: coding-style
+description: devctl プロジェクトのコーディング規約と設計方針
+author: "haruki-ickoc <https://github.com/haruki-ickoc>"
+---
+
 # コーディング規約と設計方針 (coding-style.md)
 
 このリポジトリのコードを変更・追加する際は、以下の規約と設計原則を厳格に順守してください。

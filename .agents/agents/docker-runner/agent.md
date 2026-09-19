@@ -1,6 +1,7 @@
 ---
 name: docker-runner
 description: DockerおよびCompose環境の安全な検証・テスト実行に特化した専任エージェント。
+author: "haruki-ickoc <https://github.com/haruki-ickoc>"
 tools:
   - bash
   - readFile

@@ -1,6 +1,7 @@
 ---
 name: cli-architect
 description: Cobraサブコマンド設計、Standard Go Project Layoutの責務分離、CLIユーザー体験を監査・レビューする専任エージェント。
+author: "haruki-ickoc <https://github.com/haruki-ickoc>"
 tools:
   - readFile
   - listDirectory

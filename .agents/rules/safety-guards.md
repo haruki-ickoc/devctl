@@ -1,3 +1,9 @@
+---
+title: safety-guards
+description: devctl プロジェクトの安全制約ルール
+author: "haruki-ickoc <https://github.com/haruki-ickoc>"
+---
+
 # 安全制約ルール
 
 - 外部コマンド（Docker操作など）を実行するコードを追加する場合は、必ず `internal/docker/runner.go` 等のランナー層を経由し、`--dry-run` 時にシミュレーション表示ができる状態を維持してください。

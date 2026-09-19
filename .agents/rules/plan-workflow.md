@@ -1,3 +1,9 @@
+---
+title: plan-workflow
+description: 計画書（plan）に基づく開発ワークフロー規約
+author: "haruki-ickoc <https://github.com/haruki-ickoc>"
+---
+
 # 計画書（plan）に基づく開発ワークフロー規約
 
 このリポジトリでの機能追加・改修は、すべて `releasenote/v<バージョン>-plan.md` に基づいて実施してください。
