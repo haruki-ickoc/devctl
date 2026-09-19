@@ -16,7 +16,7 @@
 
 ## ディレクトリ構成
 
-```
+```text
 devctl/
 ├── cmd/
 │   └── devctl/
@@ -244,3 +244,11 @@ devctl config init
 # 設定ファイルのパスを確認・編集
 devctl config path
 ```
+
+---
+
+## ライセンス (License)
+
+本プロジェクトは [MIT License](LICENSE) の下で公開されています。
+
+Copyright (c) 2026 [haruki-ickoc](https://github.com/haruki-ickoc)
