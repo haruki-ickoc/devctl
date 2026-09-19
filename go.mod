@@ -1,4 +1,4 @@
-module github.com/skyou/devctl
+module github.com/haruki-ickoc/devctl
 
 go 1.25.0
 

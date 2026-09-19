@@ -2,7 +2,7 @@ BINARY_NAME=devctl
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.1.0-dev")
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "HEAD")
 BUILD_DATE ?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
-LDFLAGS=-ldflags "-s -w -X github.com/skyou/devctl/internal/cmd.Version=$(VERSION) -X github.com/skyou/devctl/internal/cmd.Commit=$(COMMIT) -X github.com/skyou/devctl/internal/cmd.BuildDate=$(BUILD_DATE)"
+LDFLAGS=-ldflags "-s -w -X github.com/haruki-ickoc/devctl/internal/cmd.Version=$(VERSION) -X github.com/haruki-ickoc/devctl/internal/cmd.Commit=$(COMMIT) -X github.com/haruki-ickoc/devctl/internal/cmd.BuildDate=$(BUILD_DATE)"
 
 .PHONY: all build clean test install cross-build
 

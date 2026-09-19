@@ -6,7 +6,7 @@ import (
     "os/exec"
     "strings"
 
-    "github.com/skyou/devctl/internal/ui"
+    "github.com/haruki-ickoc/devctl/internal/ui"
 )
 
 // Runner は OS/Docker コマンドの実行を担当する構造体です。

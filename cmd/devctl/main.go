@@ -1,7 +1,7 @@
 package main
 
 import (
-    "github.com/skyou/devctl/internal/cmd"
+    "github.com/haruki-ickoc/devctl/internal/cmd"
 )
 
 // main は devctl CLI のエントリポイントです。

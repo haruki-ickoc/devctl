@@ -4,7 +4,7 @@ import (
     "fmt"
 
     "github.com/spf13/cobra"
-    "github.com/skyou/devctl/internal/ui"
+    "github.com/haruki-ickoc/devctl/internal/ui"
 )
 
 var networkCmd = &cobra.Command{

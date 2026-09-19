@@ -7,9 +7,9 @@ import (
     "text/tabwriter"
 
     "github.com/spf13/cobra"
-    "github.com/skyou/devctl/internal/config"
-    "github.com/skyou/devctl/internal/docker"
-    "github.com/skyou/devctl/internal/ui"
+    "github.com/haruki-ickoc/devctl/internal/config"
+    "github.com/haruki-ickoc/devctl/internal/docker"
+    "github.com/haruki-ickoc/devctl/internal/ui"
 )
 
 var (

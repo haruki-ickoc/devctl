@@ -4,7 +4,7 @@ import (
     "fmt"
     "strings"
 
-    "github.com/skyou/devctl/internal/ui"
+    "github.com/haruki-ickoc/devctl/internal/ui"
 )
 
 // NetworkManager は Docker ネットワークの作成・存在確認・削除を管理します。

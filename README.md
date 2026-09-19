@@ -237,17 +237,17 @@ devctl config check
 Linux および macOS（Intel / Apple Silicon）環境に対応しています。コマンド 1 行で最新の単一バイナリが `~/.local/bin/devctl` に配置されます。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/skyou/devctl/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/haruki-ickoc/devctl/main/scripts/install.sh | bash
 ```
 
 > ※ 特定のバージョンを指定してインストールする場合:
 > ```bash
-> curl -fsSL https://raw.githubusercontent.com/skyou/devctl/main/scripts/install.sh | VERSION=v0.1.0 bash
+> curl -fsSL https://raw.githubusercontent.com/haruki-ickoc/devctl/main/scripts/install.sh | VERSION=v0.1.0 bash
 > ```
 
 ### 2. GitHub Releases からの直接ダウンロード
 
-[GitHub Releases](https://github.com/skyou/devctl/releases) からご利用環境に合わせた単一バイナリを直接ダウンロードして配置できます。
+[GitHub Releases](https://github.com/haruki-ickoc/devctl/releases) からご利用環境に合わせた単一バイナリを直接ダウンロードして配置できます。
 
 | プラットフォーム | アーキテクチャ | ダウンロード対象ファイル名 |
 | :--- | :--- | :--- |
@@ -260,14 +260,14 @@ curl -fsSL https://raw.githubusercontent.com/skyou/devctl/main/scripts/install.s
 ```bash
 # 例: Linux (amd64) で手動ダウンロードする場合
 mkdir -p ~/.local/bin
-curl -Lo ~/.local/bin/devctl https://github.com/skyou/devctl/releases/latest/download/devctl-linux-amd64
+curl -Lo ~/.local/bin/devctl https://github.com/haruki-ickoc/devctl/releases/latest/download/devctl-linux-amd64
 chmod +x ~/.local/bin/devctl
 ```
 
 ### 3. ソースからのビルド（Go 開発環境がある場合）
 
 ```bash
-git clone https://github.com/skyou/devctl.git
+git clone https://github.com/haruki-ickoc/devctl.git
 cd devctl
 make install
 ```

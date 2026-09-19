@@ -5,11 +5,11 @@ set -e
 # devctl Installer Script
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/skyou/devctl/main/scripts/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/skyou/devctl/main/scripts/install.sh | VERSION=v0.1.0 bash
+#   curl -fsSL https://raw.githubusercontent.com/haruki-ickoc/devctl/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/haruki-ickoc/devctl/main/scripts/install.sh | VERSION=v0.1.0 bash
 # ==============================================================================
 
-REPO="skyou/devctl"
+REPO="haruki-ickoc/devctl"
 BIN_NAME="devctl"
 
 # 1. OS & アーキテクチャの判別

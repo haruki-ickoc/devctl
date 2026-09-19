@@ -31,7 +31,7 @@ jobs:
                   VERSION=${GITHUB_REF_NAME}
                   COMMIT=$(git rev-parse --short HEAD)
                   BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-                  LDFLAGS="-s -w -X github.com/skyou/devctl/internal/cmd.Version=${VERSION} -X github.com/skyou/devctl/internal/cmd.Commit=${COMMIT} -X github.com/skyou/devctl/internal/cmd.BuildDate=${BUILD_DATE}"
+                  LDFLAGS="-s -w -X github.com/haruki-ickoc/devctl/internal/cmd.Version=${VERSION} -X github.com/haruki-ickoc/devctl/internal/cmd.Commit=${COMMIT} -X github.com/haruki-ickoc/devctl/internal/cmd.BuildDate=${BUILD_DATE}"
 
                   mkdir -p dist
 

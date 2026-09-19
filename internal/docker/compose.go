@@ -3,7 +3,7 @@ package docker
 import (
     "strings"
 
-    "github.com/skyou/devctl/internal/ui"
+    "github.com/haruki-ickoc/devctl/internal/ui"
 )
 
 // ComposeClient は共通基盤およびプロジェクトの Docker Compose コマンド実行を担当します。
