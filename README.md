@@ -52,6 +52,7 @@ devctl/
 ## コマンド体系
 
 ### 1. 共通基盤 (Core Infrastructure)
+
 ```bash
 # 共通ネットワークを自動確認・作成した上で共通基盤を起動
 devctl core up
@@ -70,6 +71,7 @@ devctl core logs -f
 ```
 
 ### 2. プロジェクト操作 (Project Management)
+
 ```bash
 # 登録プロジェクト一覧を表示
 devctl project list    # または devctl list
@@ -95,6 +97,7 @@ devctl run catchUper backend-sh
 > プロジェクトの作業ディレクトリに移動している場合、`devctl up` や `devctl run logs` のようにプロジェクト名の引数を省略して実行できます。
 
 ### 3. 全体ステータス & ネットワーク管理
+
 ```bash
 # ネットワーク、Core、全プロジェクトの稼働状況をまとめて表示
 devctl ps
@@ -106,6 +109,7 @@ devctl network rm
 ```
 
 ### 4. 設定ファイルの管理
+
 ```bash
 # 汎用サンプル設定ファイル (~/.config/devctl/config.yaml) を生成
 devctl config init
