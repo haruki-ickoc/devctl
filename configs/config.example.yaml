@@ -30,23 +30,37 @@ core:
     traefik:
       description: "Traefik リバースプロキシ & SSL終端 (http://traefik.localhost)"
     dbgate:
-      description: "DBGate Webデータベース管理クライアント (http://dbgate.localhost)"
+      description: "DBGate Webデータベース管理クライアント (http://dbgate.localhost - 各プロジェクトの DB コンテナにアクセス可能)"
     dozzle:
       description: "Dozzle リアルタイムログビューア (http://dozzle.localhost)"
 
 # 管理対象プロジェクト定義
 projects:
   sample:
-    description: "サンプルアプリケーション環境"
+    description: "サンプルアプリケーション環境 (Laravel + MySQL)"
     workdir: "~/workspace/sample"
     compose_files:
       - "compose.yml"
-    env_file: ".env"
+    env_file: "_docker/.env"
     # プロジェクト起動前に準備すべき依存関係
     depends_on:
       network: true
       core:
         - "traefik"
+        - "dbgate"
+    tasks:
+      migrate:
+        description: "データベースマイグレーションの実行"
+        command: "docker compose exec app php artisan migrate"
+      seed:
+        description: "初期シードデータの投入"
+        command: "docker compose exec app php artisan db:seed"
+      test:
+        description: "ユニットテストの実行"
+        command: "docker compose exec app php artisan test"
+      bash:
+        description: "app コンテナへのシェル接続"
+        command: "docker compose exec app bash"
 
   catchUper:
     description: "catchUper フルスタックWebサービス (Nuxt + Node.js + FastAPI)"

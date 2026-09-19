@@ -1,0 +1,84 @@
+name: sample
+
+networks:
+    sample-network:
+        name: sample-network
+        driver: bridge
+        ipam:
+            driver: default
+            config:
+                - subnet: ${SUBNET:-10.11.0.0/24}
+                  gateway: ${GATEWAY_IP:-10.11.0.1}
+    core-network:
+        name: core-network
+        external: true
+
+volumes:
+    db-data:
+    app-data:
+
+services:
+    app:
+        build:
+            context: .
+            dockerfile: _docker/images/app/Dockerfile
+        container_name: sample-app
+        restart: unless-stopped
+        env_file:
+            - _docker/.env
+        ports:
+            - "${APP_PORT:-8000}:80"
+        volumes:
+            - .:/var/www/html
+        depends_on:
+            db:
+                condition: service_healthy
+        networks:
+            sample-network:
+                ipv4_address: ${APP_IP:-10.11.0.2}
+            core-network:
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.sample.rule=Host(`sample.localhost`)"
+            - "traefik.http.routers.sample.entrypoints=web"
+            - "traefik.http.services.sample.loadbalancer.server.port=80"
+
+    db:
+        build:
+            context: .
+            dockerfile: _docker/images/db/Dockerfile
+        container_name: sample-db
+        restart: unless-stopped
+        env_file:
+            - _docker/.env
+        environment:
+            MYSQL_DATABASE: ${DB_DATABASE:-sample}
+            MYSQL_USER: ${DB_USERNAME:-sample_user}
+            MYSQL_PASSWORD: ${DB_PASSWORD:-sample_pass}
+            MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_pass}
+        ports:
+            - "${DB_PORT:-3306}:3306"
+        volumes:
+            - db-data:/var/lib/mysql
+        networks:
+            sample-network:
+                ipv4_address: ${DB_IP:-10.11.0.3}
+            core-network:
+                aliases:
+                    - sample-db
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "mysqladmin",
+                    "ping",
+                    "-h",
+                    "localhost",
+                    "-u",
+                    "root",
+                    "-p${DB_ROOT_PASSWORD:-root_pass}",
+                ]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+            start_period: 10s

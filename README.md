@@ -42,6 +42,8 @@ devctl/
 │       └── output.go
 ├── configs/
 │   └── config.example.yaml      # 設定ファイル仕様サンプル
+├── examples/                    # 実動サンプルプロジェクト
+│   └── sample/                  # サンプル環境 (Laravel + MySQL, マルチネットワーク構成)
 ├── Makefile                     # ビルド・クロスコンパイル用
 ├── go.mod
 └── go.sum
@@ -114,6 +116,7 @@ devctl network rm
 
 1. **`config.yaml` での共通ネットワーク定義**:
    固定 IP アドレスを配備するために `subnet` と `gateway` を定義します。
+
    ```yaml
    network:
      name: "dev-network"
@@ -125,6 +128,7 @@ devctl network rm
 
 2. **各プロジェクト側の `compose.yml` での固定 IP 指定**:
    プロジェクトのサービスに固定 IP を割り当てる際は、共通ネットワークを外部ネットワーク（`external: true`）として参照し、`ipv4_address` を指定します。
+
    ```yaml
    services:
      web:
@@ -140,15 +144,18 @@ devctl network rm
 
 3. **事前検証と整合性チェック**:
    `devctl network check` を実行すると、実環境のネットワーク構成と `config.yaml` の設定値（Subnet / Gateway）が一致しているかを自動診断します。
+
    ```bash
    devctl network check
    ```
+
    > **設定不一致時のトラブルシューティング**:
    > 既にデフォルトの Docker サブネットでネットワークが作成されている場合など、設定値との不一致が検知された際は警告が表示されます。
    > その場合は `devctl network rm` で既存ネットワークを削除した上で、`devctl network create` または `devctl up` を実行して再作成してください。
 
 4. **コンテナ起動後の動作確認**:
    プロジェクト起動後、コンテナに指定の IP が割り当てられているか確認できます。
+
    ```bash
    # devctl で起動
    devctl up web-app
@@ -156,6 +163,46 @@ devctl network rm
    # 割り当てられた IP アドレスを確認
    docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <コンテナ名>
    ```
+
+#### 共通基盤 DBGate から各プロジェクト DB への接続設定
+
+Core サービスとして起動する DBGate（Web データベース管理ツール: `http://dbgate.localhost`）から、各プロジェクトの DB コンテナへアクセスするための推奨設定手順です。
+
+1. **共通ネットワークへのエイリアス設定 (`compose.yml`)**:
+   各プロジェクトの `db` コンテナを共通ネットワーク（`core-network`）に参加させ、コンテナ名または固定エイリアスを付与します。
+
+   ```yaml
+   services:
+     db:
+       image: mysql:8.0
+       networks:
+         sample-network:
+           ipv4_address: 10.11.0.3
+         core-network:
+           aliases:
+             - sample-db  # DBGate から参照するホスト名
+
+   networks:
+     sample-network:
+       name: sample-network
+     core-network:
+       name: core-network
+       external: true
+   ```
+
+2. **DBGate Web UI（<http://dbgate.localhost）での接続設定>**:
+   ブラウザから DBGate を開き、「Add connection」より以下の情報を入力します：
+   - **Connection type**: `MySQL`（または使用する DB エンジン）
+   - **Server (Host)**: `sample-db`（プロジェクト側で指定した alias 名）
+   - **Port**: `3306`（Docker ネットワーク内部の標準ポート）
+   - **User**: `sample_user`（設定したデータベースユーザー名）
+   - **Password**: `sample_pass`
+   - **Database**: `sample`
+
+> **メリット**:
+>
+> - ホスト側のポート競合（`3306`, `3307` 等）を気にする必要がなく、全プロジェクトの DB に内部ポート `3306` のまま接続できます。
+> - ホストマシンへポートフォワードを公開（`ports: "3306:3306"`）することなく安全にアクセス可能です。
 
 ### 4. 設定ファイルの管理
 
