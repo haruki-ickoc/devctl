@@ -38,7 +38,9 @@ core:
 projects:
   sample:
     description: "サンプルアプリケーション環境 (Laravel + MySQL)"
-    workdir: "~/workspace/sample"
+    # compose_files は省略時は自動検出されます。
+    # 作業ディレクトリ内に compose.override.yml が存在する場合は自動マージされます。
+    # 本番用 (compose.prod.yml 等) への一時切り替えは CLI フラグ (devctl up sample -f compose.prod.yml) で指定可能です。
     compose_files:
       - "compose.yml"
     env_file: "_docker/.env"

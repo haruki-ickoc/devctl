@@ -44,6 +44,35 @@ func TestDetectComposeFiles(t *testing.T) {
     if len(res) != 1 || res[0] != "compose.yaml" {
         t.Fatalf("compose.yaml の優先検出を期待しましたが、%v でした", res)
     }
+
+    // 5. compose.override.yml が追加された場合、自動的にマージ検出されること
+    ovFile := filepath.Join(tempDir, "compose.override.yml")
+    if err := os.WriteFile(ovFile, []byte(""), 0644); err != nil {
+        t.Fatal(err)
+    }
+    res = detectComposeFiles(tempDir)
+    if len(res) != 2 || res[0] != "compose.yaml" || res[1] != "compose.override.yml" {
+        t.Fatalf("compose.yaml と compose.override.yml の両方の検出を期待しましたが、%v でした", res)
+    }
+}
+
+func TestFindOverrideFile(t *testing.T) {
+    tempDir := t.TempDir()
+
+    // 存在しない場合
+    if ov := FindOverrideFile(tempDir, "compose.yml"); ov != "" {
+        t.Errorf("存在しない override ファイルが検出されました: %s", ov)
+    }
+
+    // compose.override.yml を作成
+    ovPath := filepath.Join(tempDir, "compose.override.yml")
+    if err := os.WriteFile(ovPath, []byte(""), 0644); err != nil {
+        t.Fatal(err)
+    }
+
+    if ov := FindOverrideFile(tempDir, "compose.yml"); ov != "compose.override.yml" {
+        t.Errorf("compose.override.yml が検出されるべきですが、%s でした", ov)
+    }
 }
 
 func TestApplyDefaultsAndResolvePaths(t *testing.T) {

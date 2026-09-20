@@ -80,14 +80,58 @@ var candidateComposeFiles = []string{
     "docker-compose.yml",
 }
 
+// candidateOverrideFiles はベース Compose ファイルに対応する override ファイル候補（優先順位順）です。
+var candidateOverrideFiles = map[string][]string{
+    "compose.yaml":        {"compose.override.yaml", "compose.override.yml"},
+    "compose.yml":         {"compose.override.yml", "compose.override.yaml"},
+    "docker-compose.yaml": {"docker-compose.override.yaml", "docker-compose.override.yml"},
+    "docker-compose.yml":  {"docker-compose.override.yml", "docker-compose.override.yaml"},
+}
+
+// FindOverrideFile は指定された作業ディレクトリとベース Compose ファイルに対応する override ファイルが存在するか確認します。
+// 見つかった場合はそのファイル名を、見つからなかった場合は空文字列を返します。
+func FindOverrideFile(workDir, baseFile string) string {
+    if workDir == "" || baseFile == "" {
+        return ""
+    }
+    fileName := filepath.Base(baseFile)
+    if overrides, ok := candidateOverrideFiles[fileName]; ok {
+        for _, ov := range overrides {
+            target := filepath.Join(workDir, ov)
+            if _, err := os.Stat(target); err == nil {
+                return ov
+            }
+        }
+    }
+    // candidateOverrideFiles に明示されていないカスタム名の場合の標準フォールバック
+    fallbacks := []string{
+        "compose.override.yml",
+        "compose.override.yaml",
+        "docker-compose.override.yml",
+        "docker-compose.override.yaml",
+    }
+    for _, fb := range fallbacks {
+        target := filepath.Join(workDir, fb)
+        if _, err := os.Stat(target); err == nil {
+            return fb
+        }
+    }
+    return ""
+}
+
 // detectComposeFiles は指定された作業ディレクトリ内に存在する Compose ファイルを自動検出します。
+// ベースファイルと同時に override ファイルが存在する場合は両方を返します。
 // 見つからない場合は現代の推奨デフォルトである compose.yml を返します。
 func detectComposeFiles(workDir string) []string {
     if workDir != "" {
         for _, candidate := range candidateComposeFiles {
             target := filepath.Join(workDir, candidate)
             if _, err := os.Stat(target); err == nil {
-                return []string{candidate}
+                files := []string{candidate}
+                if ov := FindOverrideFile(workDir, candidate); ov != "" {
+                    files = append(files, ov)
+                }
+                return files
             }
         }
     }
