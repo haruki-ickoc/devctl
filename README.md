@@ -10,6 +10,7 @@
 - **共通ネットワークの自動担保 (`devctl network`)**: プロジェクトやコアサービスの起動時に、必要な Docker ネットワークの存在確認と自動作成を実施。
 - **プロジェクト横断の Docker Compose 操作 (`devctl project` / `devctl up`)**: 任意のカレントディレクトリから対象プロジェクト名を指定して一元管理。
 - **Makefile の共通化・吸収 (`devctl run`)**: 各リポジトリに散乱しがちなログ確認やシェル起動などのタスクを設定ファイル (`config.yaml`) に集約。
+- **Compose Override 自動マージ & 環境別切り替え (`-f`)**: `compose.override.yml` の自動認識・マージに加え、本番用構成 (`compose.prod.yml`) への切り替えを `-f / --file` フラグで自在に実行可能。
 - **コンテキスト自動判定**: プロジェクトのリポジトリディレクトリに移動している場合は、プロジェクト名の指定を自動で省略可能。
 
 ---
@@ -94,10 +95,18 @@ devctl project exec catchUper backend sh
 # 設定ファイルに定義されたカスタムタスク（旧 Makefile 処理）を実行
 devctl run catchUper logs
 devctl run catchUper backend-sh
+
+# 本番用 Compose ファイル（compose.prod.yml 等）を重ねて起動・停止
+devctl up sample -f compose.prod.yml
+devctl down sample -f compose.prod.yml
 ```
 
 > **カレントディレクトリの自動判定**:
 > プロジェクトの作業ディレクトリに移動している場合、`devctl up` や `devctl run logs` のようにプロジェクト名の引数を省略して実行できます。
+
+> **Docker Compose Override の自動マージと環境切り替え**:
+> - 通常実行時（`-f` 未指定時）は、プロジェクト作業ディレクトリ内の `compose.override.yml`（または `docker-compose.override.yml` 等）が自動認識・マージされ、開発用設定（マルチステージの `dev` ターゲット、ボリュームマウント等）が有効化されます。
+> - `-f compose.prod.yml` などの追加ファイルを指定すると、開発用 override は自動的に除外され、指定したファイルがベース Compose ファイルに重ねて適用されます。
 
 ### 3. 全体ステータス & ネットワーク管理
 

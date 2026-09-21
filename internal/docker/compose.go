@@ -1,6 +1,8 @@
 package docker
 
 import (
+    "os"
+    "path/filepath"
     "strings"
 
     "github.com/haruki-ickoc/devctl/internal/ui"
@@ -25,21 +27,90 @@ func NewComposeClient(runner *Runner, composeCmd string) *ComposeClient {
 
 // ComposeOptions は Compose コマンド実行時のオプションパラメータです。
 type ComposeOptions struct {
-    WorkDir      string
-    ComposeFiles []string
-    EnvFile      string
-    Services     []string
-    ExtraArgs    []string
+    WorkDir            string
+    ComposeFiles       []string
+    CustomComposeFiles []string // CLI の --file / -f フラグ等で指定された追加・上書きファイル
+    EnvFile            string
+    Services           []string
+    ExtraArgs          []string
+}
+
+// isOverrideFile はファイルパスが Compose override ファイルかどうかを判定します。
+func isOverrideFile(filePath string) bool {
+    base := filepath.Base(filePath)
+    return strings.Contains(base, ".override.")
+}
+
+// findOverrideFile は作業ディレクトリ内でベース Compose ファイルに対応する override ファイルを探索します。
+func findOverrideFile(workDir, baseFile string) string {
+    if workDir == "" || baseFile == "" {
+        return ""
+    }
+    baseName := filepath.Base(baseFile)
+    candidateMap := map[string][]string{
+        "compose.yaml":        {"compose.override.yaml", "compose.override.yml"},
+        "compose.yml":         {"compose.override.yml", "compose.override.yaml"},
+        "docker-compose.yaml": {"docker-compose.override.yaml", "docker-compose.override.yml"},
+        "docker-compose.yml":  {"docker-compose.override.yml", "docker-compose.override.yaml"},
+    }
+    if list, ok := candidateMap[baseName]; ok {
+        for _, c := range list {
+            p := filepath.Join(workDir, c)
+            if _, err := os.Stat(p); err == nil {
+                return c
+            }
+        }
+    }
+    fallbacks := []string{
+        "compose.override.yml",
+        "compose.override.yaml",
+        "docker-compose.override.yml",
+        "docker-compose.override.yaml",
+    }
+    for _, fb := range fallbacks {
+        p := filepath.Join(workDir, fb)
+        if _, err := os.Stat(p); err == nil {
+            return fb
+        }
+    }
+    return ""
 }
 
 // buildBaseArgs は docker compose の基本コマンドと引数リストを構築します。
+// CLI から CustomComposeFiles が指定された場合はベースファイルにそれらを重ね、
+// 未指定の場合は通常通り作業ディレクトリ内の override ファイルを自動マージします。
 func (c *ComposeClient) buildBaseArgs(opts ComposeOptions) (string, []string) {
     cmdParts := strings.Fields(c.composeCmd)
     bin := cmdParts[0]
     args := cmdParts[1:]
 
-    for _, f := range opts.ComposeFiles {
-        args = append(args, "-f", f)
+    if len(opts.CustomComposeFiles) > 0 {
+        // CLI から CustomComposeFiles が指定されている場合:
+        // ベースファイルから開発用 override を除外した上で、指定ファイルを順に付加
+        for _, f := range opts.ComposeFiles {
+            if isOverrideFile(f) {
+                continue
+            }
+            args = append(args, "-f", f)
+        }
+        for _, f := range opts.CustomComposeFiles {
+            args = append(args, "-f", f)
+        }
+    } else {
+        // CustomComposeFiles が未指定の場合（通常時）:
+        // 既存の ComposeFiles を適用し、override ファイルが含まれていなければ自動検出して追加
+        hasOverride := false
+        for _, f := range opts.ComposeFiles {
+            if isOverrideFile(f) {
+                hasOverride = true
+            }
+            args = append(args, "-f", f)
+        }
+        if !hasOverride && len(opts.ComposeFiles) > 0 && opts.WorkDir != "" {
+            if ov := findOverrideFile(opts.WorkDir, opts.ComposeFiles[0]); ov != "" {
+                args = append(args, "-f", ov)
+            }
+        }
     }
 
     if opts.EnvFile != "" {

@@ -17,6 +17,7 @@ var (
     projectRemoveVolumes bool
     projectFollowLogs    bool
     projectTailLogs      string
+    projectComposeFiles  []string
 )
 
 var projectCmd = &cobra.Command{
@@ -121,10 +122,11 @@ var projectUpCmd = &cobra.Command{
         }
 
         opts := docker.ComposeOptions{
-            WorkDir:      proj.WorkDir,
-            ComposeFiles: proj.ComposeFiles,
-            EnvFile:      proj.EnvFile,
-            Services:     remainingArgs,
+            WorkDir:            proj.WorkDir,
+            ComposeFiles:       proj.ComposeFiles,
+            CustomComposeFiles: projectComposeFiles,
+            EnvFile:            proj.EnvFile,
+            Services:           remainingArgs,
         }
 
         if err := composeClient.Up(opts, projectBuild); err != nil {
@@ -146,10 +148,11 @@ var projectDownCmd = &cobra.Command{
         }
 
         opts := docker.ComposeOptions{
-            WorkDir:      proj.WorkDir,
-            ComposeFiles: proj.ComposeFiles,
-            EnvFile:      proj.EnvFile,
-            Services:     remainingArgs,
+            WorkDir:            proj.WorkDir,
+            ComposeFiles:       proj.ComposeFiles,
+            CustomComposeFiles: projectComposeFiles,
+            EnvFile:            proj.EnvFile,
+            Services:           remainingArgs,
         }
 
         if err := composeClient.Down(opts, projectRemoveVolumes); err != nil {
@@ -171,10 +174,11 @@ var projectRestartCmd = &cobra.Command{
         }
 
         opts := docker.ComposeOptions{
-            WorkDir:      proj.WorkDir,
-            ComposeFiles: proj.ComposeFiles,
-            EnvFile:      proj.EnvFile,
-            Services:     remainingArgs,
+            WorkDir:            proj.WorkDir,
+            ComposeFiles:       proj.ComposeFiles,
+            CustomComposeFiles: projectComposeFiles,
+            EnvFile:            proj.EnvFile,
+            Services:           remainingArgs,
         }
 
         return composeClient.Restart(opts)
@@ -191,10 +195,11 @@ var projectPsCmd = &cobra.Command{
         }
 
         opts := docker.ComposeOptions{
-            WorkDir:      proj.WorkDir,
-            ComposeFiles: proj.ComposeFiles,
-            EnvFile:      proj.EnvFile,
-            Services:     remainingArgs,
+            WorkDir:            proj.WorkDir,
+            ComposeFiles:       proj.ComposeFiles,
+            CustomComposeFiles: projectComposeFiles,
+            EnvFile:            proj.EnvFile,
+            Services:           remainingArgs,
         }
 
         return composeClient.Ps(opts)
@@ -211,10 +216,11 @@ var projectLogsCmd = &cobra.Command{
         }
 
         opts := docker.ComposeOptions{
-            WorkDir:      proj.WorkDir,
-            ComposeFiles: proj.ComposeFiles,
-            EnvFile:      proj.EnvFile,
-            Services:     remainingArgs,
+            WorkDir:            proj.WorkDir,
+            ComposeFiles:       proj.ComposeFiles,
+            CustomComposeFiles: projectComposeFiles,
+            EnvFile:            proj.EnvFile,
+            Services:           remainingArgs,
         }
 
         return composeClient.Logs(opts, projectFollowLogs, projectTailLogs)
@@ -238,9 +244,10 @@ var projectExecCmd = &cobra.Command{
         execCmd := remainingArgs[1:]
 
         opts := docker.ComposeOptions{
-            WorkDir:      proj.WorkDir,
-            ComposeFiles: proj.ComposeFiles,
-            EnvFile:      proj.EnvFile,
+            WorkDir:            proj.WorkDir,
+            ComposeFiles:       proj.ComposeFiles,
+            CustomComposeFiles: projectComposeFiles,
+            EnvFile:            proj.EnvFile,
         }
 
         return composeClient.Exec(opts, service, execCmd)
@@ -371,5 +378,18 @@ func init() {
     for _, f := range logFlags {
         f.Flags().BoolVarP(&projectFollowLogs, "follow", "f", false, "ログ出力をリアルタイム追跡")
         f.Flags().StringVarP(&projectTailLogs, "tail", "t", "100", "末尾から表示する行数")
+        f.Flags().StringSliceVar(&projectComposeFiles, "file", nil, "追加または上書きで適用する Compose ファイル (例: compose.prod.yml)")
+    }
+
+    // Compose ファイルの追加・上書きフラグ (-f / --file)
+    composeFileFlags := []*cobra.Command{
+        projectUpCmd, topUpCmd,
+        projectDownCmd, topDownCmd,
+        projectRestartCmd, topRestartCmd,
+        projectPsCmd,
+        projectExecCmd,
+    }
+    for _, f := range composeFileFlags {
+        f.Flags().StringSliceVarP(&projectComposeFiles, "file", "f", nil, "追加または上書きで適用する Compose ファイル (例: compose.prod.yml)")
     }
 }
