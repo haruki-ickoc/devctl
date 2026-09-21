@@ -105,6 +105,7 @@ devctl down sample -f compose.prod.yml
 > プロジェクトの作業ディレクトリに移動している場合、`devctl up` や `devctl run logs` のようにプロジェクト名の引数を省略して実行できます。
 
 > **Docker Compose Override の自動マージと環境切り替え**:
+>
 > - 通常実行時（`-f` 未指定時）は、プロジェクト作業ディレクトリ内の `compose.override.yml`（または `docker-compose.override.yml` 等）が自動認識・マージされ、開発用設定（マルチステージの `dev` ターゲット、ボリュームマウント等）が有効化されます。
 > - `-f compose.prod.yml` などの追加ファイルを指定すると、開発用 override は自動的に除外され、指定したファイルがベース Compose ファイルに重ねて適用されます。
 
@@ -250,6 +251,7 @@ curl -fsSL https://raw.githubusercontent.com/haruki-ickoc/devctl/main/scripts/in
 ```
 
 > ※ 特定のバージョンを指定してインストールする場合:
+>
 > ```bash
 > curl -fsSL https://raw.githubusercontent.com/haruki-ickoc/devctl/main/scripts/install.sh | VERSION=v0.1.0 bash
 > ```
