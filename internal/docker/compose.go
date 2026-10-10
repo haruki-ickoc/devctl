@@ -164,6 +164,28 @@ func (c *ComposeClient) Down(opts ComposeOptions, removeVolumes bool) error {
     return c.runner.RunCommand(opts.WorkDir, bin, args...)
 }
 
+// Start は停止済み（Exited）のコンテナを開始します（新規作成は行いません）。
+func (c *ComposeClient) Start(opts ComposeOptions) error {
+    bin, baseArgs := c.buildBaseArgs(opts)
+    args := append(baseArgs, "start")
+    args = append(args, opts.Services...)
+    args = append(args, opts.ExtraArgs...)
+
+    ui.Step("%s で停止済みコンテナを開始中...", opts.WorkDir)
+    return c.runner.RunCommand(opts.WorkDir, bin, args...)
+}
+
+// Stop は稼働中のコンテナを一時停止します（コンテナの削除は行いません）。
+func (c *ComposeClient) Stop(opts ComposeOptions) error {
+    bin, baseArgs := c.buildBaseArgs(opts)
+    args := append(baseArgs, "stop")
+    args = append(args, opts.Services...)
+    args = append(args, opts.ExtraArgs...)
+
+    ui.Step("%s で稼働中コンテナを一時停止中...", opts.WorkDir)
+    return c.runner.RunCommand(opts.WorkDir, bin, args...)
+}
+
 // Restart はサービスを再起動します。
 func (c *ComposeClient) Restart(opts ComposeOptions) error {
     bin, baseArgs := c.buildBaseArgs(opts)

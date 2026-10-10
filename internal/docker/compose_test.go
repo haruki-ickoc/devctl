@@ -122,3 +122,36 @@ func TestComposeClient_Build(t *testing.T) {
         }
     })
 }
+
+func TestComposeClient_StartAndStop(t *testing.T) {
+    runner := NewRunner(true, false) // DryRun: true
+    client := NewComposeClient(runner, "docker compose")
+
+    t.Run("StartおよびStopがDryRunで正常終了すること", func(t *testing.T) {
+        opts := ComposeOptions{
+            WorkDir:      t.TempDir(),
+            ComposeFiles: []string{"compose.yml"},
+        }
+        if err := client.Start(opts); err != nil {
+            t.Errorf("Startの実行に失敗しました: %v", err)
+        }
+        if err := client.Stop(opts); err != nil {
+            t.Errorf("Stopの実行に失敗しました: %v", err)
+        }
+    })
+
+    t.Run("サービス指定およびカスタムComposeファイル指定時のStart/Stopが正常終了すること", func(t *testing.T) {
+        opts := ComposeOptions{
+            WorkDir:            t.TempDir(),
+            ComposeFiles:       []string{"compose.yml"},
+            CustomComposeFiles: []string{"compose.prod.yml"},
+            Services:           []string{"app", "worker"},
+        }
+        if err := client.Start(opts); err != nil {
+            t.Errorf("Startの実行に失敗しました: %v", err)
+        }
+        if err := client.Stop(opts); err != nil {
+            t.Errorf("Stopの実行に失敗しました: %v", err)
+        }
+    })
+}
