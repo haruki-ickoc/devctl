@@ -93,8 +93,16 @@ devctl build sample front app
 # キャッシュを無効化してビルド / ベースイメージを強制プル
 devctl build sample --no-cache --pull
 
-# プロジェクトを停止
+# プロジェクトを停止・破棄（コンテナ削除）
 devctl project down sample  # または devctl down sample
+
+# コンテナを削除せずに一時停止 / 停止済みコンテナを高速再開
+devctl project stop sample  # または devctl stop sample
+devctl project start sample # または devctl start sample
+
+# 特定サービスのみを一時停止 / 再開
+devctl stop sample app
+devctl start sample app
 
 # プロジェクトのログを確認
 devctl project logs -f catchUper
@@ -113,7 +121,12 @@ devctl build sample -f compose.prod.yml
 ```
 
 > **カレントディレクトリの自動判定**:
-> プロジェクトの作業ディレクトリに移動している場合、`devctl up` や `devctl run logs` のようにプロジェクト名の引数を省略して実行できます。
+> プロジェクトの作業ディレクトリに移動している場合、`devctl up` や `devctl stop`、`devctl run logs` のようにプロジェクト名の引数を省略して実行できます。
+
+> **`up / down` と `start / stop` の使い分け**:
+>
+> - **`up` / `down`**: コンテナの新規作成（Create）および削除（Remove）を伴います。初回起動時や `compose.yml`・`.env` の設定変更を反映したい場合に使用します。
+> - **`start` / `stop`**: 既存コンテナを削除せずに一時停止（Exited）および再開します。コンテナ再作成コストがかからないため、作業の一時中断・メモリ節約・特定サービスの休止と超高速な再開に適しています。
 
 > **Docker Compose Override の自動マージと環境切り替え**:
 >

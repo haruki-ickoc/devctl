@@ -96,3 +96,89 @@ func TestBuildCmd_Execution(t *testing.T) {
         }
     })
 }
+
+func TestStartStopCmd_FlagsAndRegistration(t *testing.T) {
+    // RootCmd への登録確認
+    for _, target := range []string{"start", "stop"} {
+        found := false
+        for _, c := range RootCmd.Commands() {
+            if c.Name() == target {
+                found = true
+                break
+            }
+        }
+        if !found {
+            t.Errorf("RootCmd に '%s' コマンドが登録されていません", target)
+        }
+    }
+
+    // projectCmd 配下への登録確認
+    for _, target := range []string{"start", "stop"} {
+        found := false
+        for _, c := range projectCmd.Commands() {
+            if c.Name() == target {
+                found = true
+                break
+            }
+        }
+        if !found {
+            t.Errorf("projectCmd に '%s' サブコマンドが登録されていません", target)
+        }
+    }
+
+    // -f / --file フラグの存在確認
+    for _, c := range []*cobra.Command{projectStartCmd, topStartCmd, projectStopCmd, topStopCmd} {
+        if c.Flag("file") == nil {
+            t.Errorf("コマンド '%s' に -f/--file フラグが存在しません", c.Name())
+        }
+    }
+}
+
+func TestStartStopCmd_Execution(t *testing.T) {
+    dryRun = true
+    verbose = false
+    runner = docker.NewRunner(true, false)
+    composeClient = docker.NewComposeClient(runner, "docker compose")
+
+    cfg = &config.Config{
+        Defaults: config.DefaultsConfig{
+            ComposeCmd: "docker compose",
+        },
+        Projects: map[string]config.ProjectItem{
+            "test-app": {
+                Name:         "test-app",
+                WorkDir:      t.TempDir(),
+                ComposeFiles: []string{"compose.yml"},
+            },
+        },
+    }
+
+    t.Run("プロジェクト指定でStartおよびStopがDryRun実行できること", func(t *testing.T) {
+        projectComposeFiles = nil
+        if err := projectStartCmd.RunE(projectStartCmd, []string{"test-app"}); err != nil {
+            t.Fatalf("projectStartCmd の実行に失敗しました: %v", err)
+        }
+        if err := projectStopCmd.RunE(projectStopCmd, []string{"test-app"}); err != nil {
+            t.Fatalf("projectStopCmd の実行に失敗しました: %v", err)
+        }
+    })
+
+    t.Run("サービス指定と-fフラグ指定でtopStartCmd/topStopCmdがDryRun実行できること", func(t *testing.T) {
+        projectComposeFiles = []string{"compose.prod.yml"}
+        if err := topStartCmd.RunE(topStartCmd, []string{"test-app", "worker"}); err != nil {
+            t.Fatalf("topStartCmd の実行に失敗しました: %v", err)
+        }
+        if err := topStopCmd.RunE(topStopCmd, []string{"test-app", "worker"}); err != nil {
+            t.Fatalf("topStopCmd の実行に失敗しました: %v", err)
+        }
+    })
+
+    t.Run("存在しないプロジェクトでエラーになること", func(t *testing.T) {
+        if err := topStartCmd.RunE(topStartCmd, []string{"unknown-project"}); err == nil {
+            t.Errorf("topStartCmd: 存在しないプロジェクトでエラーが発生しませんでした")
+        }
+        if err := topStopCmd.RunE(topStopCmd, []string{"unknown-project"}); err == nil {
+            t.Errorf("topStopCmd: 存在しないプロジェクトでエラーが発生しませんでした")
+        }
+    })
+}

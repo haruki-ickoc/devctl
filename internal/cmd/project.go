@@ -194,6 +194,62 @@ var projectDownCmd = &cobra.Command{
     },
 }
 
+var projectStartCmd = &cobra.Command{
+    Use:   "start [project-name] [services...]",
+    Short: "停止済みのプロジェクトコンテナを開始",
+    Long: `停止済み（Exited）のプロジェクトコンテナを既存状態のまま高速再開します（新規作成は行いません）。
+特定のサービスのみを対象に開始することも可能です。`,
+    RunE: func(cmd *cobra.Command, args []string) error {
+        proj, remainingArgs, err := resolveTargetProject(args)
+        if err != nil {
+            return err
+        }
+
+        opts := docker.ComposeOptions{
+            WorkDir:            proj.WorkDir,
+            ComposeFiles:       proj.ComposeFiles,
+            CustomComposeFiles: projectComposeFiles,
+            EnvFile:            proj.EnvFile,
+            Services:           remainingArgs,
+        }
+
+        if err := composeClient.Start(opts); err != nil {
+            return fmt.Errorf("プロジェクト '%s' の開始に失敗しました: %w (コンテナが未作成の場合は 'devctl up %s' を実行してください)", proj.Name, err, proj.Name)
+        }
+
+        ui.Success("プロジェクト '%s' を開始しました。", proj.Name)
+        return nil
+    },
+}
+
+var projectStopCmd = &cobra.Command{
+    Use:   "stop [project-name] [services...]",
+    Short: "稼働中のプロジェクトコンテナを一時停止",
+    Long: `稼働中のプロジェクトコンテナを一時停止（Exited）します（コンテナの削除は行いません）。
+特定のサービスのみを対象に停止することも可能です。`,
+    RunE: func(cmd *cobra.Command, args []string) error {
+        proj, remainingArgs, err := resolveTargetProject(args)
+        if err != nil {
+            return err
+        }
+
+        opts := docker.ComposeOptions{
+            WorkDir:            proj.WorkDir,
+            ComposeFiles:       proj.ComposeFiles,
+            CustomComposeFiles: projectComposeFiles,
+            EnvFile:            proj.EnvFile,
+            Services:           remainingArgs,
+        }
+
+        if err := composeClient.Stop(opts); err != nil {
+            return fmt.Errorf("プロジェクト '%s' の一時停止に失敗しました: %w", proj.Name, err)
+        }
+
+        ui.Success("プロジェクト '%s' を一時停止しました。", proj.Name)
+        return nil
+    },
+}
+
 var projectRestartCmd = &cobra.Command{
     Use:   "restart [project-name] [services...]",
     Short: "プロジェクトコンテナを再起動",
@@ -357,6 +413,16 @@ var (
         Short: "'project down' の短縮エイリアス",
         RunE:  projectDownCmd.RunE,
     }
+    topStartCmd = &cobra.Command{
+        Use:   "start [project-name] [services...]",
+        Short: "'project start' の短縮エイリアス",
+        RunE:  projectStartCmd.RunE,
+    }
+    topStopCmd = &cobra.Command{
+        Use:   "stop [project-name] [services...]",
+        Short: "'project stop' の短縮エイリアス",
+        RunE:  projectStopCmd.RunE,
+    }
     topRestartCmd = &cobra.Command{
         Use:   "restart [project-name] [services...]",
         Short: "'project restart' の短縮エイリアス",
@@ -385,6 +451,8 @@ func init() {
     projectCmd.AddCommand(projectBuildCmd)
     projectCmd.AddCommand(projectUpCmd)
     projectCmd.AddCommand(projectDownCmd)
+    projectCmd.AddCommand(projectStartCmd)
+    projectCmd.AddCommand(projectStopCmd)
     projectCmd.AddCommand(projectRestartCmd)
     projectCmd.AddCommand(projectPsCmd)
     projectCmd.AddCommand(projectLogsCmd)
@@ -395,6 +463,8 @@ func init() {
     RootCmd.AddCommand(topBuildCmd)
     RootCmd.AddCommand(topUpCmd)
     RootCmd.AddCommand(topDownCmd)
+    RootCmd.AddCommand(topStartCmd)
+    RootCmd.AddCommand(topStopCmd)
     RootCmd.AddCommand(topRestartCmd)
     RootCmd.AddCommand(topLogsCmd)
     RootCmd.AddCommand(topRunCmd)
@@ -429,6 +499,8 @@ func init() {
         projectBuildCmd, topBuildCmd,
         projectUpCmd, topUpCmd,
         projectDownCmd, topDownCmd,
+        projectStartCmd, topStartCmd,
+        projectStopCmd, topStopCmd,
         projectRestartCmd, topRestartCmd,
         projectPsCmd,
         projectExecCmd,
