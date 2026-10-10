@@ -93,3 +93,32 @@ func TestBuildBaseArgs(t *testing.T) {
         }
     })
 }
+
+func TestComposeClient_Build(t *testing.T) {
+    runner := NewRunner(true, false) // DryRun: true
+    client := NewComposeClient(runner, "docker compose")
+
+    t.Run("通常のBuild実行がDryRunで正常終了すること", func(t *testing.T) {
+        opts := ComposeOptions{
+            WorkDir:      t.TempDir(),
+            ComposeFiles: []string{"compose.yml"},
+        }
+        err := client.Build(opts, false, false)
+        if err != nil {
+            t.Errorf("Buildの実行に失敗しました: %v", err)
+        }
+    })
+
+    t.Run("サービス指定と各フラグ（no-cache, pull）が指定された場合も正常終了すること", func(t *testing.T) {
+        opts := ComposeOptions{
+            WorkDir:            t.TempDir(),
+            ComposeFiles:       []string{"compose.yml"},
+            CustomComposeFiles: []string{"compose.prod.yml"},
+            Services:           []string{"app", "web"},
+        }
+        err := client.Build(opts, true, true)
+        if err != nil {
+            t.Errorf("Buildの実行に失敗しました: %v", err)
+        }
+    })
+}

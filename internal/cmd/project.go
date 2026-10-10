@@ -14,6 +14,8 @@ import (
 
 var (
     projectBuild         bool
+    projectNoCache       bool
+    projectPull          bool
     projectRemoveVolumes bool
     projectFollowLogs    bool
     projectTailLogs      string
@@ -104,6 +106,34 @@ var projectListCmd = &cobra.Command{
             fmt.Fprintf(w, "%s\t%s\t%d 件\t%s\n", p.Name, p.WorkDir, taskCount, p.Description)
         }
         w.Flush()
+        return nil
+    },
+}
+
+var projectBuildCmd = &cobra.Command{
+    Use:   "build [project-name] [services...]",
+    Short: "プロジェクトコンテナイメージをビルド",
+    Long: `指定されたプロジェクトのコンテナイメージをビルドします（コンテナは起動しません）。
+特定のサービスのみを対象にビルドすることも可能です。`,
+    RunE: func(cmd *cobra.Command, args []string) error {
+        proj, remainingArgs, err := resolveTargetProject(args)
+        if err != nil {
+            return err
+        }
+
+        opts := docker.ComposeOptions{
+            WorkDir:            proj.WorkDir,
+            ComposeFiles:       proj.ComposeFiles,
+            CustomComposeFiles: projectComposeFiles,
+            EnvFile:            proj.EnvFile,
+            Services:           remainingArgs,
+        }
+
+        if err := composeClient.Build(opts, projectNoCache, projectPull); err != nil {
+            return fmt.Errorf("プロジェクト '%s' のイメージビルドに失敗しました: %w", proj.Name, err)
+        }
+
+        ui.Success("プロジェクト '%s' のイメージビルドが正常に完了しました。", proj.Name)
         return nil
     },
 }
@@ -312,6 +342,11 @@ var projectRunCmd = &cobra.Command{
 
 // 日常の開発体験を快適にするトップレベルエイリアスコマンド群
 var (
+    topBuildCmd = &cobra.Command{
+        Use:   "build [project-name] [services...]",
+        Short: "'project build' の短縮エイリアス",
+        RunE:  projectBuildCmd.RunE,
+    }
     topUpCmd = &cobra.Command{
         Use:   "up [project-name] [services...]",
         Short: "'project up' の短縮エイリアス",
@@ -347,6 +382,7 @@ var (
 func init() {
     RootCmd.AddCommand(projectCmd)
     projectCmd.AddCommand(projectListCmd)
+    projectCmd.AddCommand(projectBuildCmd)
     projectCmd.AddCommand(projectUpCmd)
     projectCmd.AddCommand(projectDownCmd)
     projectCmd.AddCommand(projectRestartCmd)
@@ -356,6 +392,7 @@ func init() {
     projectCmd.AddCommand(projectRunCmd)
 
     // トップレベルエイリアスをルートに追加
+    RootCmd.AddCommand(topBuildCmd)
     RootCmd.AddCommand(topUpCmd)
     RootCmd.AddCommand(topDownCmd)
     RootCmd.AddCommand(topRestartCmd)
@@ -364,6 +401,12 @@ func init() {
     RootCmd.AddCommand(topListCmd)
 
     // フラグ定義
+    buildFlags := []*cobra.Command{projectBuildCmd, topBuildCmd}
+    for _, f := range buildFlags {
+        f.Flags().BoolVar(&projectNoCache, "no-cache", false, "キャッシュを使用せずに最初からイメージをビルド")
+        f.Flags().BoolVar(&projectPull, "pull", false, "常に最新のベースイメージをプルしてビルド")
+    }
+
     flags := []*cobra.Command{projectUpCmd, topUpCmd}
     for _, f := range flags {
         f.Flags().BoolVarP(&projectBuild, "build", "b", false, "起動前にイメージをビルド")
@@ -383,6 +426,7 @@ func init() {
 
     // Compose ファイルの追加・上書きフラグ (-f / --file)
     composeFileFlags := []*cobra.Command{
+        projectBuildCmd, topBuildCmd,
         projectUpCmd, topUpCmd,
         projectDownCmd, topDownCmd,
         projectRestartCmd, topRestartCmd,
