@@ -83,8 +83,26 @@ devctl project list    # または devctl list
 # 依存するネットワークや Core サービスを準備してプロジェクトを起動
 devctl project up sample    # または devctl up sample
 
-# プロジェクトを停止
+# プロジェクトのコンテナイメージをビルド（コンテナは起動しません）
+devctl project build sample # または devctl build sample
+
+# 特定のサービスのみを指定してビルド
+devctl build sample app
+devctl build sample front app
+
+# キャッシュを無効化してビルド / ベースイメージを強制プル
+devctl build sample --no-cache --pull
+
+# プロジェクトを停止・破棄（コンテナ削除）
 devctl project down sample  # または devctl down sample
+
+# コンテナを削除せずに一時停止 / 停止済みコンテナを高速再開
+devctl project stop sample  # または devctl stop sample
+devctl project start sample # または devctl start sample
+
+# 特定サービスのみを一時停止 / 再開
+devctl stop sample app
+devctl start sample app
 
 # プロジェクトのログを確認
 devctl project logs -f catchUper
@@ -96,17 +114,29 @@ devctl project exec catchUper backend sh
 devctl run catchUper logs
 devctl run catchUper backend-sh
 
-# 本番用 Compose ファイル（compose.prod.yml 等）を重ねて起動・停止
+# 本番用 Compose ファイル（compose.prod.yml 等）を重ねて起動・停止・ビルド
 devctl up sample -f compose.prod.yml
 devctl down sample -f compose.prod.yml
+devctl build sample -f compose.prod.yml
 ```
 
 > **カレントディレクトリの自動判定**:
-> プロジェクトの作業ディレクトリに移動している場合、`devctl up` や `devctl run logs` のようにプロジェクト名の引数を省略して実行できます。
+> プロジェクトの作業ディレクトリに移動している場合、`devctl up` や `devctl stop`、`devctl run logs` のようにプロジェクト名の引数を省略して実行できます。
+
+> **`up / down` と `start / stop` の使い分け**:
+>
+> - **`up` / `down`**: コンテナの新規作成（Create）および削除（Remove）を伴います。初回起動時や `compose.yml`・`.env` の設定変更を反映したい場合に使用します。
+> - **`start` / `stop`**: 既存コンテナを削除せずに一時停止（Exited）および再開します。コンテナ再作成コストがかからないため、作業の一時中断・メモリ節約・特定サービスの休止と超高速な再開に適しています。
 
 > **Docker Compose Override の自動マージと環境切り替え**:
+>
 > - 通常実行時（`-f` 未指定時）は、プロジェクト作業ディレクトリ内の `compose.override.yml`（または `docker-compose.override.yml` 等）が自動認識・マージされ、開発用設定（マルチステージの `dev` ターゲット、ボリュームマウント等）が有効化されます。
 > - `-f compose.prod.yml` などの追加ファイルを指定すると、開発用 override は自動的に除外され、指定したファイルがベース Compose ファイルに重ねて適用されます。
+
+> **共通基盤（Core）の生存検証と自動起動**:
+>
+> - `config.yaml` の `depends_on.core` にサービス（例: `traefik`, `dbgate`）が指定されている場合、`devctl up` / `start` / `restart` の実行前に該当サービスの稼働状態（`running`）を自動検証します。
+> - すでにすべて稼働中であれば起動処理をスキップし、停止中（未起動）のサービスがある場合のみ不足分を自動起動します。
 
 ### 3. 全体ステータス & ネットワーク管理
 
@@ -250,6 +280,7 @@ curl -fsSL https://raw.githubusercontent.com/haruki-ickoc/devctl/main/scripts/in
 ```
 
 > ※ 特定のバージョンを指定してインストールする場合:
+>
 > ```bash
 > curl -fsSL https://raw.githubusercontent.com/haruki-ickoc/devctl/main/scripts/install.sh | VERSION=v0.1.0 bash
 > ```

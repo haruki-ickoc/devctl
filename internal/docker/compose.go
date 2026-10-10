@@ -1,6 +1,7 @@
 package docker
 
 import (
+    "fmt"
     "os"
     "path/filepath"
     "strings"
@@ -120,6 +121,23 @@ func (c *ComposeClient) buildBaseArgs(opts ComposeOptions) (string, []string) {
     return bin, args
 }
 
+// Build は指定されたサービスのコンテナイメージをビルドします（コンテナは起動しません）。
+func (c *ComposeClient) Build(opts ComposeOptions, noCache, pull bool) error {
+    bin, baseArgs := c.buildBaseArgs(opts)
+    args := append(baseArgs, "build")
+    if noCache {
+        args = append(args, "--no-cache")
+    }
+    if pull {
+        args = append(args, "--pull")
+    }
+    args = append(args, opts.Services...)
+    args = append(args, opts.ExtraArgs...)
+
+    ui.Step("%s でイメージをビルド中...", opts.WorkDir)
+    return c.runner.RunCommand(opts.WorkDir, bin, args...)
+}
+
 // Up はサービスをバックグラウンド（デタッチドモード）で起動します。
 func (c *ComposeClient) Up(opts ComposeOptions, build bool) error {
     bin, baseArgs := c.buildBaseArgs(opts)
@@ -144,6 +162,28 @@ func (c *ComposeClient) Down(opts ComposeOptions, removeVolumes bool) error {
     args = append(args, opts.ExtraArgs...)
 
     ui.Step("%s でコンテナを停止中...", opts.WorkDir)
+    return c.runner.RunCommand(opts.WorkDir, bin, args...)
+}
+
+// Start は停止済み（Exited）のコンテナを開始します（新規作成は行いません）。
+func (c *ComposeClient) Start(opts ComposeOptions) error {
+    bin, baseArgs := c.buildBaseArgs(opts)
+    args := append(baseArgs, "start")
+    args = append(args, opts.Services...)
+    args = append(args, opts.ExtraArgs...)
+
+    ui.Step("%s で停止済みコンテナを開始中...", opts.WorkDir)
+    return c.runner.RunCommand(opts.WorkDir, bin, args...)
+}
+
+// Stop は稼働中のコンテナを一時停止します（コンテナの削除は行いません）。
+func (c *ComposeClient) Stop(opts ComposeOptions) error {
+    bin, baseArgs := c.buildBaseArgs(opts)
+    args := append(baseArgs, "stop")
+    args = append(args, opts.Services...)
+    args = append(args, opts.ExtraArgs...)
+
+    ui.Step("%s で稼働中コンテナを一時停止中...", opts.WorkDir)
     return c.runner.RunCommand(opts.WorkDir, bin, args...)
 }
 
@@ -205,4 +245,75 @@ func (c *ComposeClient) Run(opts ComposeOptions, service string, cmd []string) e
 func (c *ComposeClient) RunShellTask(workDir, shellCommand string) error {
     ui.Step("カスタムタスクを実行中: %s", shellCommand)
     return c.runner.RunShell(workDir, shellCommand)
+}
+
+// findMissingServices は要求されたサービス一覧のうち、稼働中サービス一覧に含まれていないものを抽出します。
+func findMissingServices(required, running []string) []string {
+    runningSet := make(map[string]bool, len(running))
+    for _, s := range running {
+        trimmed := strings.TrimSpace(s)
+        if trimmed != "" {
+            runningSet[trimmed] = true
+        }
+    }
+
+    var missing []string
+    for _, req := range required {
+        if !runningSet[req] {
+            missing = append(missing, req)
+        }
+    }
+    return missing
+}
+
+// RunningServices は指定された Compose 環境で現在 running 状態のサービス名一覧を取得します。
+func (c *ComposeClient) RunningServices(opts ComposeOptions) ([]string, error) {
+    if c.runner.DryRun {
+        ui.Dim("[dry-run] 共通基盤サービスの稼働状態確認シミュレーション（起動プレビューのため未起動と仮定）")
+        return nil, nil
+    }
+
+    bin, baseArgs := c.buildBaseArgs(opts)
+    args := append(baseArgs, "ps", "--services", "--status", "running")
+
+    out, err := c.runner.RunCommandOutput(opts.WorkDir, bin, args...)
+    if err != nil {
+        return nil, fmt.Errorf("サービスの稼働状態確認に失敗しました: %w", err)
+    }
+
+    if out == "" {
+        return nil, nil
+    }
+
+    var running []string
+    for _, line := range strings.Split(out, "\n") {
+        s := strings.TrimSpace(line)
+        if s != "" {
+            running = append(running, s)
+        }
+    }
+    return running, nil
+}
+
+// EnsureServicesRunning は opts.Services で指定されたサービスが稼働中か検証し、停止しているサービスのみを自動起動します。
+func (c *ComposeClient) EnsureServicesRunning(opts ComposeOptions) error {
+    if len(opts.Services) == 0 {
+        return nil
+    }
+
+    running, err := c.RunningServices(opts)
+    if err != nil {
+        return err
+    }
+
+    missing := findMissingServices(opts.Services, running)
+    if len(missing) == 0 {
+        ui.Success("共通基盤サービス (%s) は既に稼働中です。", strings.Join(opts.Services, ", "))
+        return nil
+    }
+
+    ui.Info("共通基盤サービス [%s] が停止しているため自動起動します...", strings.Join(missing, ", "))
+    upOpts := opts
+    upOpts.Services = missing
+    return c.Up(upOpts, false)
 }

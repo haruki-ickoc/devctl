@@ -14,6 +14,8 @@ import (
 
 var (
     projectBuild         bool
+    projectNoCache       bool
+    projectPull          bool
     projectRemoveVolumes bool
     projectFollowLogs    bool
     projectTailLogs      string
@@ -56,7 +58,7 @@ func resolveTargetProject(args []string) (*config.ProjectItem, []string, error) 
     return nil, nil, fmt.Errorf("プロジェクト名が指定されておらず、カレントディレクトリも登録プロジェクトではありません")
 }
 
-// prepareDependencies はプロジェクトが依存する共通ネットワークや Core サービスの起動状態を事前に確保します。
+// prepareDependencies はプロジェクトが依存する共通ネットワークや Core サービスの起動状態を事前に検証・確保します。
 func prepareDependencies(proj *config.ProjectItem) error {
     if proj.DependsOn.Network {
         if err := networkManager.Ensure(cfg.Network.Name, cfg.Network.Driver, cfg.Network.Subnet, cfg.Network.Gateway, cfg.Network.Attachable); err != nil {
@@ -65,15 +67,24 @@ func prepareDependencies(proj *config.ProjectItem) error {
     }
 
     if len(proj.DependsOn.Core) > 0 {
-        ui.Info("%s が依存する共通基盤サービスを準備中: %v", proj.Name, proj.DependsOn.Core)
+        if cfg.Core.WorkDir == "" {
+            return fmt.Errorf("プロジェクト '%s' は共通基盤 (%v) に依存していますが、config.yaml に core.workdir が設定されていません", proj.Name, proj.DependsOn.Core)
+        }
+        if !dryRun {
+            if _, err := os.Stat(cfg.Core.WorkDir); os.IsNotExist(err) {
+                return fmt.Errorf("共通基盤の作業ディレクトリが存在しません: %s", cfg.Core.WorkDir)
+            }
+        }
+
+        ui.Info("%s が依存する共通基盤サービスを検証中: %v", proj.Name, proj.DependsOn.Core)
         opts := docker.ComposeOptions{
             WorkDir:      cfg.Core.WorkDir,
             ComposeFiles: cfg.Core.ComposeFiles,
             EnvFile:      cfg.Core.EnvFile,
             Services:     proj.DependsOn.Core,
         }
-        if err := composeClient.Up(opts, false); err != nil {
-            return fmt.Errorf("必要な共通基盤サービスの起動に失敗しました: %w", err)
+        if err := composeClient.EnsureServicesRunning(opts); err != nil {
+            return fmt.Errorf("必要な共通基盤サービスの準備に失敗しました: %w", err)
         }
     }
     return nil
@@ -104,6 +115,34 @@ var projectListCmd = &cobra.Command{
             fmt.Fprintf(w, "%s\t%s\t%d 件\t%s\n", p.Name, p.WorkDir, taskCount, p.Description)
         }
         w.Flush()
+        return nil
+    },
+}
+
+var projectBuildCmd = &cobra.Command{
+    Use:   "build [project-name] [services...]",
+    Short: "プロジェクトコンテナイメージをビルド",
+    Long: `指定されたプロジェクトのコンテナイメージをビルドします（コンテナは起動しません）。
+特定のサービスのみを対象にビルドすることも可能です。`,
+    RunE: func(cmd *cobra.Command, args []string) error {
+        proj, remainingArgs, err := resolveTargetProject(args)
+        if err != nil {
+            return err
+        }
+
+        opts := docker.ComposeOptions{
+            WorkDir:            proj.WorkDir,
+            ComposeFiles:       proj.ComposeFiles,
+            CustomComposeFiles: projectComposeFiles,
+            EnvFile:            proj.EnvFile,
+            Services:           remainingArgs,
+        }
+
+        if err := composeClient.Build(opts, projectNoCache, projectPull); err != nil {
+            return fmt.Errorf("プロジェクト '%s' のイメージビルドに失敗しました: %w", proj.Name, err)
+        }
+
+        ui.Success("プロジェクト '%s' のイメージビルドが正常に完了しました。", proj.Name)
         return nil
     },
 }
@@ -164,12 +203,76 @@ var projectDownCmd = &cobra.Command{
     },
 }
 
+var projectStartCmd = &cobra.Command{
+    Use:   "start [project-name] [services...]",
+    Short: "停止済みのプロジェクトコンテナを開始",
+    Long: `停止済み（Exited）のプロジェクトコンテナを既存状態のまま高速再開します（新規作成は行いません）。
+特定のサービスのみを対象に開始することも可能です。`,
+    RunE: func(cmd *cobra.Command, args []string) error {
+        proj, remainingArgs, err := resolveTargetProject(args)
+        if err != nil {
+            return err
+        }
+
+        if err := prepareDependencies(proj); err != nil {
+            return err
+        }
+
+        opts := docker.ComposeOptions{
+            WorkDir:            proj.WorkDir,
+            ComposeFiles:       proj.ComposeFiles,
+            CustomComposeFiles: projectComposeFiles,
+            EnvFile:            proj.EnvFile,
+            Services:           remainingArgs,
+        }
+
+        if err := composeClient.Start(opts); err != nil {
+            return fmt.Errorf("プロジェクト '%s' の開始に失敗しました: %w (コンテナが未作成の場合は 'devctl up %s' を実行してください)", proj.Name, err, proj.Name)
+        }
+
+        ui.Success("プロジェクト '%s' を開始しました。", proj.Name)
+        return nil
+    },
+}
+
+var projectStopCmd = &cobra.Command{
+    Use:   "stop [project-name] [services...]",
+    Short: "稼働中のプロジェクトコンテナを一時停止",
+    Long: `稼働中のプロジェクトコンテナを一時停止（Exited）します（コンテナの削除は行いません）。
+特定のサービスのみを対象に停止することも可能です。`,
+    RunE: func(cmd *cobra.Command, args []string) error {
+        proj, remainingArgs, err := resolveTargetProject(args)
+        if err != nil {
+            return err
+        }
+
+        opts := docker.ComposeOptions{
+            WorkDir:            proj.WorkDir,
+            ComposeFiles:       proj.ComposeFiles,
+            CustomComposeFiles: projectComposeFiles,
+            EnvFile:            proj.EnvFile,
+            Services:           remainingArgs,
+        }
+
+        if err := composeClient.Stop(opts); err != nil {
+            return fmt.Errorf("プロジェクト '%s' の一時停止に失敗しました: %w", proj.Name, err)
+        }
+
+        ui.Success("プロジェクト '%s' を一時停止しました。", proj.Name)
+        return nil
+    },
+}
+
 var projectRestartCmd = &cobra.Command{
     Use:   "restart [project-name] [services...]",
     Short: "プロジェクトコンテナを再起動",
     RunE: func(cmd *cobra.Command, args []string) error {
         proj, remainingArgs, err := resolveTargetProject(args)
         if err != nil {
+            return err
+        }
+
+        if err := prepareDependencies(proj); err != nil {
             return err
         }
 
@@ -312,6 +415,11 @@ var projectRunCmd = &cobra.Command{
 
 // 日常の開発体験を快適にするトップレベルエイリアスコマンド群
 var (
+    topBuildCmd = &cobra.Command{
+        Use:   "build [project-name] [services...]",
+        Short: "'project build' の短縮エイリアス",
+        RunE:  projectBuildCmd.RunE,
+    }
     topUpCmd = &cobra.Command{
         Use:   "up [project-name] [services...]",
         Short: "'project up' の短縮エイリアス",
@@ -321,6 +429,16 @@ var (
         Use:   "down [project-name] [services...]",
         Short: "'project down' の短縮エイリアス",
         RunE:  projectDownCmd.RunE,
+    }
+    topStartCmd = &cobra.Command{
+        Use:   "start [project-name] [services...]",
+        Short: "'project start' の短縮エイリアス",
+        RunE:  projectStartCmd.RunE,
+    }
+    topStopCmd = &cobra.Command{
+        Use:   "stop [project-name] [services...]",
+        Short: "'project stop' の短縮エイリアス",
+        RunE:  projectStopCmd.RunE,
     }
     topRestartCmd = &cobra.Command{
         Use:   "restart [project-name] [services...]",
@@ -347,8 +465,11 @@ var (
 func init() {
     RootCmd.AddCommand(projectCmd)
     projectCmd.AddCommand(projectListCmd)
+    projectCmd.AddCommand(projectBuildCmd)
     projectCmd.AddCommand(projectUpCmd)
     projectCmd.AddCommand(projectDownCmd)
+    projectCmd.AddCommand(projectStartCmd)
+    projectCmd.AddCommand(projectStopCmd)
     projectCmd.AddCommand(projectRestartCmd)
     projectCmd.AddCommand(projectPsCmd)
     projectCmd.AddCommand(projectLogsCmd)
@@ -356,14 +477,23 @@ func init() {
     projectCmd.AddCommand(projectRunCmd)
 
     // トップレベルエイリアスをルートに追加
+    RootCmd.AddCommand(topBuildCmd)
     RootCmd.AddCommand(topUpCmd)
     RootCmd.AddCommand(topDownCmd)
+    RootCmd.AddCommand(topStartCmd)
+    RootCmd.AddCommand(topStopCmd)
     RootCmd.AddCommand(topRestartCmd)
     RootCmd.AddCommand(topLogsCmd)
     RootCmd.AddCommand(topRunCmd)
     RootCmd.AddCommand(topListCmd)
 
     // フラグ定義
+    buildFlags := []*cobra.Command{projectBuildCmd, topBuildCmd}
+    for _, f := range buildFlags {
+        f.Flags().BoolVar(&projectNoCache, "no-cache", false, "キャッシュを使用せずに最初からイメージをビルド")
+        f.Flags().BoolVar(&projectPull, "pull", false, "常に最新のベースイメージをプルしてビルド")
+    }
+
     flags := []*cobra.Command{projectUpCmd, topUpCmd}
     for _, f := range flags {
         f.Flags().BoolVarP(&projectBuild, "build", "b", false, "起動前にイメージをビルド")
@@ -383,8 +513,11 @@ func init() {
 
     // Compose ファイルの追加・上書きフラグ (-f / --file)
     composeFileFlags := []*cobra.Command{
+        projectBuildCmd, topBuildCmd,
         projectUpCmd, topUpCmd,
         projectDownCmd, topDownCmd,
+        projectStartCmd, topStartCmd,
+        projectStopCmd, topStopCmd,
         projectRestartCmd, topRestartCmd,
         projectPsCmd,
         projectExecCmd,
