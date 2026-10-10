@@ -58,7 +58,7 @@ func resolveTargetProject(args []string) (*config.ProjectItem, []string, error) 
     return nil, nil, fmt.Errorf("プロジェクト名が指定されておらず、カレントディレクトリも登録プロジェクトではありません")
 }
 
-// prepareDependencies はプロジェクトが依存する共通ネットワークや Core サービスの起動状態を事前に確保します。
+// prepareDependencies はプロジェクトが依存する共通ネットワークや Core サービスの起動状態を事前に検証・確保します。
 func prepareDependencies(proj *config.ProjectItem) error {
     if proj.DependsOn.Network {
         if err := networkManager.Ensure(cfg.Network.Name, cfg.Network.Driver, cfg.Network.Subnet, cfg.Network.Gateway, cfg.Network.Attachable); err != nil {
@@ -67,15 +67,24 @@ func prepareDependencies(proj *config.ProjectItem) error {
     }
 
     if len(proj.DependsOn.Core) > 0 {
-        ui.Info("%s が依存する共通基盤サービスを準備中: %v", proj.Name, proj.DependsOn.Core)
+        if cfg.Core.WorkDir == "" {
+            return fmt.Errorf("プロジェクト '%s' は共通基盤 (%v) に依存していますが、config.yaml に core.workdir が設定されていません", proj.Name, proj.DependsOn.Core)
+        }
+        if !dryRun {
+            if _, err := os.Stat(cfg.Core.WorkDir); os.IsNotExist(err) {
+                return fmt.Errorf("共通基盤の作業ディレクトリが存在しません: %s", cfg.Core.WorkDir)
+            }
+        }
+
+        ui.Info("%s が依存する共通基盤サービスを検証中: %v", proj.Name, proj.DependsOn.Core)
         opts := docker.ComposeOptions{
             WorkDir:      cfg.Core.WorkDir,
             ComposeFiles: cfg.Core.ComposeFiles,
             EnvFile:      cfg.Core.EnvFile,
             Services:     proj.DependsOn.Core,
         }
-        if err := composeClient.Up(opts, false); err != nil {
-            return fmt.Errorf("必要な共通基盤サービスの起動に失敗しました: %w", err)
+        if err := composeClient.EnsureServicesRunning(opts); err != nil {
+            return fmt.Errorf("必要な共通基盤サービスの準備に失敗しました: %w", err)
         }
     }
     return nil
@@ -205,6 +214,10 @@ var projectStartCmd = &cobra.Command{
             return err
         }
 
+        if err := prepareDependencies(proj); err != nil {
+            return err
+        }
+
         opts := docker.ComposeOptions{
             WorkDir:            proj.WorkDir,
             ComposeFiles:       proj.ComposeFiles,
@@ -256,6 +269,10 @@ var projectRestartCmd = &cobra.Command{
     RunE: func(cmd *cobra.Command, args []string) error {
         proj, remainingArgs, err := resolveTargetProject(args)
         if err != nil {
+            return err
+        }
+
+        if err := prepareDependencies(proj); err != nil {
             return err
         }
 
