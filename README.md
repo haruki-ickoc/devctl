@@ -83,6 +83,16 @@ devctl project list    # または devctl list
 # 依存するネットワークや Core サービスを準備してプロジェクトを起動
 devctl project up sample    # または devctl up sample
 
+# プロジェクトのコンテナイメージをビルド（コンテナは起動しません）
+devctl project build sample # または devctl build sample
+
+# 特定のサービスのみを指定してビルド
+devctl build sample app
+devctl build sample front app
+
+# キャッシュを無効化してビルド / ベースイメージを強制プル
+devctl build sample --no-cache --pull
+
 # プロジェクトを停止
 devctl project down sample  # または devctl down sample
 
@@ -96,9 +106,10 @@ devctl project exec catchUper backend sh
 devctl run catchUper logs
 devctl run catchUper backend-sh
 
-# 本番用 Compose ファイル（compose.prod.yml 等）を重ねて起動・停止
+# 本番用 Compose ファイル（compose.prod.yml 等）を重ねて起動・停止・ビルド
 devctl up sample -f compose.prod.yml
 devctl down sample -f compose.prod.yml
+devctl build sample -f compose.prod.yml
 ```
 
 > **カレントディレクトリの自動判定**:

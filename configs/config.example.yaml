@@ -40,7 +40,7 @@ projects:
     description: "サンプルアプリケーション環境 (Laravel + MySQL)"
     # compose_files は省略時は自動検出されます。
     # 作業ディレクトリ内に compose.override.yml が存在する場合は自動マージされます。
-    # 本番用 (compose.prod.yml 等) への一時切り替えは CLI フラグ (devctl up sample -f compose.prod.yml) で指定可能です。
+    # 本番用 (compose.prod.yml 等) への一時切り替えは CLI フラグ (devctl up sample -f compose.prod.yml や devctl build sample -f compose.prod.yml) で指定可能です。
     compose_files:
       - "compose.yml"
     env_file: "_docker/.env"
@@ -72,6 +72,7 @@ projects:
     depends_on:
       network: true
     # プロジェクト固有のカスタムタスク (Makefile 代替)
+    # ※コンテナの起動・停止・ログ・ビルド等は devctl up / down / logs / build で代替できるため、tasks への登録は不要です。
     tasks:
       logs:
         description: "全サービスのログをリアルタイム追跡"

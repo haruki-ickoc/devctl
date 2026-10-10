@@ -120,6 +120,23 @@ func (c *ComposeClient) buildBaseArgs(opts ComposeOptions) (string, []string) {
     return bin, args
 }
 
+// Build は指定されたサービスのコンテナイメージをビルドします（コンテナは起動しません）。
+func (c *ComposeClient) Build(opts ComposeOptions, noCache, pull bool) error {
+    bin, baseArgs := c.buildBaseArgs(opts)
+    args := append(baseArgs, "build")
+    if noCache {
+        args = append(args, "--no-cache")
+    }
+    if pull {
+        args = append(args, "--pull")
+    }
+    args = append(args, opts.Services...)
+    args = append(args, opts.ExtraArgs...)
+
+    ui.Step("%s でイメージをビルド中...", opts.WorkDir)
+    return c.runner.RunCommand(opts.WorkDir, bin, args...)
+}
+
 // Up はサービスをバックグラウンド（デタッチドモード）で起動します。
 func (c *ComposeClient) Up(opts ComposeOptions, build bool) error {
     bin, baseArgs := c.buildBaseArgs(opts)
