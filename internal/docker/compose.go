@@ -1,6 +1,7 @@
 package docker
 
 import (
+    "fmt"
     "os"
     "path/filepath"
     "strings"
@@ -244,4 +245,75 @@ func (c *ComposeClient) Run(opts ComposeOptions, service string, cmd []string) e
 func (c *ComposeClient) RunShellTask(workDir, shellCommand string) error {
     ui.Step("カスタムタスクを実行中: %s", shellCommand)
     return c.runner.RunShell(workDir, shellCommand)
+}
+
+// findMissingServices は要求されたサービス一覧のうち、稼働中サービス一覧に含まれていないものを抽出します。
+func findMissingServices(required, running []string) []string {
+    runningSet := make(map[string]bool, len(running))
+    for _, s := range running {
+        trimmed := strings.TrimSpace(s)
+        if trimmed != "" {
+            runningSet[trimmed] = true
+        }
+    }
+
+    var missing []string
+    for _, req := range required {
+        if !runningSet[req] {
+            missing = append(missing, req)
+        }
+    }
+    return missing
+}
+
+// RunningServices は指定された Compose 環境で現在 running 状態のサービス名一覧を取得します。
+func (c *ComposeClient) RunningServices(opts ComposeOptions) ([]string, error) {
+    if c.runner.DryRun {
+        ui.Dim("[dry-run] 共通基盤サービスの稼働状態確認シミュレーション（起動プレビューのため未起動と仮定）")
+        return nil, nil
+    }
+
+    bin, baseArgs := c.buildBaseArgs(opts)
+    args := append(baseArgs, "ps", "--services", "--status", "running")
+
+    out, err := c.runner.RunCommandOutput(opts.WorkDir, bin, args...)
+    if err != nil {
+        return nil, fmt.Errorf("サービスの稼働状態確認に失敗しました: %w", err)
+    }
+
+    if out == "" {
+        return nil, nil
+    }
+
+    var running []string
+    for _, line := range strings.Split(out, "\n") {
+        s := strings.TrimSpace(line)
+        if s != "" {
+            running = append(running, s)
+        }
+    }
+    return running, nil
+}
+
+// EnsureServicesRunning は opts.Services で指定されたサービスが稼働中か検証し、停止しているサービスのみを自動起動します。
+func (c *ComposeClient) EnsureServicesRunning(opts ComposeOptions) error {
+    if len(opts.Services) == 0 {
+        return nil
+    }
+
+    running, err := c.RunningServices(opts)
+    if err != nil {
+        return err
+    }
+
+    missing := findMissingServices(opts.Services, running)
+    if len(missing) == 0 {
+        ui.Success("共通基盤サービス (%s) は既に稼働中です。", strings.Join(opts.Services, ", "))
+        return nil
+    }
+
+    ui.Info("共通基盤サービス [%s] が停止しているため自動起動します...", strings.Join(missing, ", "))
+    upOpts := opts
+    upOpts.Services = missing
+    return c.Up(upOpts, false)
 }

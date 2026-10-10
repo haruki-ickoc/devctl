@@ -44,7 +44,8 @@ projects:
     compose_files:
       - "compose.yml"
     env_file: "_docker/.env"
-    # プロジェクト起動前に準備すべき依存関係
+    # プロジェクト起動・再開前に準備すべき依存関係
+    # core に指定されたサービスは稼働状態 (running) が自動検証され、停止している場合のみ自動起動されます。
     depends_on:
       network: true
       core:

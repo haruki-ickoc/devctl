@@ -182,3 +182,63 @@ func TestStartStopCmd_Execution(t *testing.T) {
         }
     })
 }
+
+func TestPrepareDependencies_WithCoreAndNetwork(t *testing.T) {
+    dryRun = true
+    verbose = false
+    runner = docker.NewRunner(true, false)
+    composeClient = docker.NewComposeClient(runner, "docker compose")
+    networkManager = docker.NewNetworkManager(runner)
+
+    coreDir := t.TempDir()
+    projDir := t.TempDir()
+
+    cfg = &config.Config{
+        Defaults: config.DefaultsConfig{
+            ComposeCmd: "docker compose",
+        },
+        Network: config.NetworkConfig{
+            Name:       "dev-network",
+            Driver:     "bridge",
+            Attachable: true,
+        },
+        Core: config.CoreConfig{
+            WorkDir:      coreDir,
+            ComposeFiles: []string{"compose.yml"},
+        },
+        Projects: map[string]config.ProjectItem{
+            "dep-app": {
+                Name:         "dep-app",
+                WorkDir:      projDir,
+                ComposeFiles: []string{"compose.yml"},
+                DependsOn: config.DependsOnConfig{
+                    Network: true,
+                    Core:    []string{"traefik", "dbgate"},
+                },
+            },
+        },
+    }
+
+    t.Run("up/start/restartで依存ネットワークとCoreサービスの生存検証・自動起動が動作すること", func(t *testing.T) {
+        projectComposeFiles = nil
+        projectBuild = false
+
+        if err := projectUpCmd.RunE(projectUpCmd, []string{"dep-app"}); err != nil {
+            t.Fatalf("projectUpCmd (with deps) failed: %v", err)
+        }
+        if err := projectStartCmd.RunE(projectStartCmd, []string{"dep-app"}); err != nil {
+            t.Fatalf("projectStartCmd (with deps) failed: %v", err)
+        }
+        if err := projectRestartCmd.RunE(projectRestartCmd, []string{"dep-app"}); err != nil {
+            t.Fatalf("projectRestartCmd (with deps) failed: %v", err)
+        }
+    })
+
+    t.Run("core.workdirが未設定の場合はエラーを返すこと", func(t *testing.T) {
+        cfg.Core.WorkDir = ""
+        err := projectUpCmd.RunE(projectUpCmd, []string{"dep-app"})
+        if err == nil {
+            t.Errorf("core.workdir 未設定時にエラーが発生しませんでした")
+        }
+    })
+}

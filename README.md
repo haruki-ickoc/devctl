@@ -133,6 +133,11 @@ devctl build sample -f compose.prod.yml
 > - 通常実行時（`-f` 未指定時）は、プロジェクト作業ディレクトリ内の `compose.override.yml`（または `docker-compose.override.yml` 等）が自動認識・マージされ、開発用設定（マルチステージの `dev` ターゲット、ボリュームマウント等）が有効化されます。
 > - `-f compose.prod.yml` などの追加ファイルを指定すると、開発用 override は自動的に除外され、指定したファイルがベース Compose ファイルに重ねて適用されます。
 
+> **共通基盤（Core）の生存検証と自動起動**:
+>
+> - `config.yaml` の `depends_on.core` にサービス（例: `traefik`, `dbgate`）が指定されている場合、`devctl up` / `start` / `restart` の実行前に該当サービスの稼働状態（`running`）を自動検証します。
+> - すでにすべて稼働中であれば起動処理をスキップし、停止中（未起動）のサービスがある場合のみ不足分を自動起動します。
+
 ### 3. 全体ステータス & ネットワーク管理
 
 ```bash
