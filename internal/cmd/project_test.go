@@ -440,3 +440,166 @@ func TestUpCmd_WithBuildEnvOverride(t *testing.T) {
         t.Fatalf("BUILD_ENV=local 環境での devctl up petfood に失敗しました: %v", err)
     }
 }
+
+func TestBackupRestoreCmd_FlagsAndRegistration(t *testing.T) {
+    // RootCmd にはトップレベル短縮形 (backup / restore) が登録されていないことを確認
+    for _, target := range []string{"backup", "restore"} {
+        for _, c := range RootCmd.Commands() {
+            if c.Name() == target {
+                t.Errorf("RootCmd に不要なトップレベル短縮コマンド '%s' が登録されています", target)
+            }
+        }
+    }
+
+    // projectCmd 配下の backup / restore 登録確認
+    for _, target := range []string{"backup", "restore"} {
+        found := false
+        for _, c := range projectCmd.Commands() {
+            if c.Name() == target {
+                found = true
+                break
+            }
+        }
+        if !found {
+            t.Errorf("projectCmd に '%s' サブコマンドが登録されていません", target)
+        }
+    }
+
+    // coreCmd 配下の backup / restore / start / stop 登録確認
+    for _, target := range []string{"backup", "restore", "start", "stop"} {
+        found := false
+        for _, c := range coreCmd.Commands() {
+            if c.Name() == target {
+                found = true
+                break
+            }
+        }
+        if !found {
+            t.Errorf("coreCmd に '%s' サブコマンドが登録されていません", target)
+        }
+    }
+
+    // フラグ確認
+    if projectBackupCmd.Flag("output") == nil {
+        t.Errorf("projectBackupCmd に -o/--output フラグが存在しません")
+    }
+    if projectBackupCmd.Flag("file") == nil {
+        t.Errorf("projectBackupCmd に -f/--file フラグが存在しません")
+    }
+    if projectRestoreCmd.Flag("yes") == nil {
+        t.Errorf("projectRestoreCmd に -y/--yes フラグが存在しません")
+    }
+    if projectRestoreCmd.Flag("file") == nil {
+        t.Errorf("projectRestoreCmd に -f/--file フラグが存在しません")
+    }
+    if coreBackupCmd.Flag("output") == nil {
+        t.Errorf("coreBackupCmd に -o/--output フラグが存在しません")
+    }
+    if coreRestoreCmd.Flag("yes") == nil {
+        t.Errorf("coreRestoreCmd に -y/--yes フラグが存在しません")
+    }
+}
+
+func TestBackupRestoreCmd_Execution(t *testing.T) {
+    dryRun = true
+    verbose = false
+    runner = docker.NewRunner(true, false)
+    composeClient = docker.NewComposeClient(runner, "docker compose")
+    networkManager = docker.NewNetworkManager(runner)
+
+    coreDir := t.TempDir()
+    projDir := t.TempDir()
+
+    coreCompose := `name: toolbox
+volumes:
+    dbgate-data:
+    dozzle-data:
+`
+    projCompose := `name: sample
+volumes:
+    db-data:
+    app-data:
+`
+    if err := os.WriteFile(filepath.Join(coreDir, "compose.yml"), []byte(coreCompose), 0644); err != nil {
+        t.Fatal(err)
+    }
+    if err := os.WriteFile(filepath.Join(projDir, "compose.yml"), []byte(projCompose), 0644); err != nil {
+        t.Fatal(err)
+    }
+
+    cfg = &config.Config{
+        Defaults: config.DefaultsConfig{
+            ComposeCmd: "docker compose",
+        },
+        Core: config.CoreConfig{
+            WorkDir:      coreDir,
+            ComposeFiles: []string{"compose.yml"},
+        },
+        Projects: map[string]config.ProjectItem{
+            "sample": {
+                Name:         "sample",
+                WorkDir:      projDir,
+                ComposeFiles: []string{"compose.yml"},
+            },
+        },
+    }
+
+    t.Run("project backup / restore が全ボリュームおよび指定ボリュームでDryRun実行できること", func(t *testing.T) {
+        projectComposeFiles = nil
+        projectBackupOutput = ""
+        projectRestoreYes = true
+
+        if err := projectBackupCmd.RunE(projectBackupCmd, []string{"sample"}); err != nil {
+            t.Fatalf("projectBackupCmd (全ボリューム) failed: %v", err)
+        }
+        if err := projectBackupCmd.RunE(projectBackupCmd, []string{"sample", "db-data"}); err != nil {
+            t.Fatalf("projectBackupCmd (ボリューム指定) failed: %v", err)
+        }
+
+        dummyArchive := filepath.Join(projDir, ".devctl", "backups", "dummy.tar.gz")
+        if err := projectRestoreCmd.RunE(projectRestoreCmd, []string{"sample", dummyArchive}); err != nil {
+            t.Fatalf("projectRestoreCmd (全ボリューム) failed: %v", err)
+        }
+        if err := projectRestoreCmd.RunE(projectRestoreCmd, []string{"sample", dummyArchive, "db-data"}); err != nil {
+            t.Fatalf("projectRestoreCmd (ボリューム指定) failed: %v", err)
+        }
+    })
+
+    t.Run("project backup / restore でスコープ外のボリューム指定や引数不足はエラーになること", func(t *testing.T) {
+        if err := projectBackupCmd.RunE(projectBackupCmd, []string{"sample", "invalid-vol"}); err == nil {
+            t.Errorf("スコープ外ボリューム指定時にエラーになりませんでした")
+        }
+        if err := projectRestoreCmd.RunE(projectRestoreCmd, []string{"sample"}); err == nil {
+            t.Errorf("アーカイブ未指定時にエラーになりませんでした")
+        }
+    })
+
+    t.Run("core start / stop / backup / restore がDryRun実行できること", func(t *testing.T) {
+        coreBackupOutput = ""
+        coreRestoreYes = true
+
+        if err := coreStopCmd.RunE(coreStopCmd, nil); err != nil {
+            t.Fatalf("coreStopCmd failed: %v", err)
+        }
+        if err := coreBackupCmd.RunE(coreBackupCmd, []string{"dbgate-data"}); err != nil {
+            t.Fatalf("coreBackupCmd failed: %v", err)
+        }
+        dummyCoreArchive := filepath.Join(coreDir, ".devctl", "backups", "core-dummy.tar.gz")
+        if err := coreRestoreCmd.RunE(coreRestoreCmd, []string{dummyCoreArchive, "dbgate-data"}); err != nil {
+            t.Fatalf("coreRestoreCmd failed: %v", err)
+        }
+        if err := coreStartCmd.RunE(coreStartCmd, nil); err != nil {
+            t.Fatalf("coreStartCmd failed: %v", err)
+        }
+    })
+
+    t.Run("core restore でスコープ外ボリューム指定や引数不足はエラーになること", func(t *testing.T) {
+        dummyCoreArchive := filepath.Join(coreDir, ".devctl", "backups", "core-dummy.tar.gz")
+        if err := coreRestoreCmd.RunE(coreRestoreCmd, []string{dummyCoreArchive, "unknown-vol"}); err == nil {
+            t.Errorf("coreRestoreCmd: スコープ外ボリューム指定時にエラーになりませんでした")
+        }
+        if err := coreRestoreCmd.RunE(coreRestoreCmd, nil); err == nil {
+            t.Errorf("coreRestoreCmd: アーカイブ未指定時にエラーになりませんでした")
+        }
+    })
+}

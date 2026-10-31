@@ -11,6 +11,7 @@
 - **プロジェクト横断の Docker Compose 操作 (`devctl project` / `devctl up`)**: 任意のカレントディレクトリから対象プロジェクト名を指定して一元管理。
 - **Makefile の共通化・吸収 (`devctl run`)**: 各リポジトリに散乱しがちなログ確認やシェル起動、初期セットアップ等の複数コマンド連続実行タスクを設定ファイル (`config.yaml`) に集約。
 - **Compose Override 自動マージ & 環境別切り替え (`BUILD_ENV` / `-f`)**: `.env` の `BUILD_ENV` に応じた環境別 override（例: `compose.local.yaml`）や標準 `compose.override.yml` の自動認識・マージに加え、`-f / --file` フラグでの明示的な切り替えにも対応。
+- **スコープ限定の安全な Volume Backup / Restore (`project backup/restore`, `core backup/restore`)**: コンテナを削除せずに、対象の project または core に属する Named Volume のみを `.tar.gz` アーカイブとして退避・復元。
 - **コンテキスト自動判定**: プロジェクトのリポジトリディレクトリに移動している場合は、プロジェクト名の指定を自動で省略可能。
 
 ---
@@ -38,7 +39,8 @@ devctl/
 │   ├── docker/                  # Docker & Compose コマンド実行ラッパー
 │   │   ├── compose.go
 │   │   ├── network.go
-│   │   └── runner.go
+│   │   ├── runner.go
+│   │   └── volume.go
 │   └── ui/                      # ターミナル出力装飾
 │       └── output.go
 ├── configs/
@@ -69,8 +71,18 @@ devctl core pull traefik dbgate
 # （どちらの方法で起動・操作しても完全に相互互換で動作します）
 cd ~/workspace/toolbox && docker compose up -d
 
-# 共通基盤を停止
+# 共通基盤を停止（コンテナ削除）
 devctl core down
+
+# 共通基盤コンテナを削除せずに一時停止 / 再開
+devctl core stop
+devctl core start
+
+# 共通基盤の Named Volume をバックアップ / リストア（事前に devctl core stop で一時停止が必要）
+devctl core backup
+devctl core backup dbgate-data -o ./backups/dbgate.tar.gz
+devctl core restore ~/workspace/toolbox/.devctl/backups/core-20261031-193000.tar.gz
+devctl core restore ./backups/dbgate.tar.gz dbgate-data -y
 
 # 共通基盤を再起動
 devctl core restart
@@ -138,6 +150,14 @@ devctl run catchUper backend-sh
 devctl up sample -f compose.prod.yml
 devctl down sample -f compose.prod.yml
 devctl build sample -f compose.prod.yml
+
+# プロジェクトの Named Volume をバックアップ / リストア（事前に devctl stop <project> で一時停止が必要）
+devctl stop sample
+devctl project backup sample
+devctl project backup sample db-data -o ./sample-db.tar.gz
+devctl project restore sample ~/workspace/sample/.devctl/backups/sample-20261031-193000.tar.gz
+devctl project restore sample ./sample-db.tar.gz db-data -y
+devctl start sample
 ```
 
 > **カレントディレクトリの自動判定**:
@@ -184,6 +204,13 @@ devctl build sample -f compose.prod.yml
 >
 > - `config.yaml` の `depends_on.core` にサービス（例: `traefik`, `dbgate`）が指定されている場合、`devctl up` / `start` / `restart` の実行前に該当サービスの稼働状態（`running`）を自動検証します。
 > - すでにすべて稼働中であれば起動処理をスキップし、停止中（未起動）のサービスがある場合のみ不足分を自動起動します。
+
+> **Named Volume の安全なバックアップと復元 (`project backup/restore`, `core backup/restore`)**:
+>
+> - **スコープ限定と他環境への非干渉**: 指定した `project` または `core` の Compose 定義に含まれる Named Volume のみを対象とし、無関係な Docker Volume やコンテナには一切影響しません。
+> - **コンテナ削除なしの整合性保護（事前 `stop` 必須）**: コンテナの強制削除は一切行いません。データの破損・不整合を防ぐため、対象スコープのコンテナが稼働中（`running`）の場合は実行を拒否します。必ず事前に `devctl stop <project>`（または `devctl core stop`）で一時停止してから実行してください。
+> - **保存先とアーカイブ形式**: デフォルトでは `<対象WorkDir>/.devctl/backups/<project-or-core>-<YYYYMMDD-HHMMSS>.tar.gz` に保存されます（`-o` / `--output` で変更可）。アーカイブはトップレベルに `<論理Volume名>/` ディレクトリを持つ `.tar.gz` 形式のため、1つのアーカイブから特定 Volume のみを選択して復元することも可能です。
+> - **復元前の検証と確認プロンプト**: `restore` 実行時は事前にアーカイブの破損チェックと収録 Volume 検証を行い、上書き対象 Volume を表示して `[y/N]` の確認を求めます（`-y` / `--yes` で確認スキップ可）。復元先 Volume が未作成の場合は Compose 互換ラベル付きで自動作成します。
 
 ### 3. 全体ステータス & ネットワーク管理
 

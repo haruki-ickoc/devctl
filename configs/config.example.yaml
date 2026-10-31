@@ -80,7 +80,7 @@ projects:
     depends_on:
       network: true
     # プロジェクト固有のカスタムタスク (Makefile 代替)
-    # ※コンテナの起動・停止・再起動・ビルド・イメージ取得等は devctl up / down / start / stop / restart / logs / build / pull で代替できるため、tasks への登録は不要です。
+    # ※コンテナの起動・停止・再起動・ビルド・イメージ取得・Named Volume の退避/復元は devctl up / down / start / stop / restart / logs / build / pull / project backup / project restore で代替できるため、tasks への登録は不要です。
     tasks:
       logs:
         description: "全サービスのログをリアルタイム追跡"
