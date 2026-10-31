@@ -406,7 +406,7 @@ var projectRunCmd = &cobra.Command{
                 // プロジェクト内で定義済みのタスク一覧を表示
                 ui.Info("プロジェクト '%s' の利用可能タスク一覧:", p.Name)
                 for tName, tItem := range p.Tasks {
-                    fmt.Printf("  %-15s %s\n", tName, tItem.Description)
+                    fmt.Printf("  %-15s %s\n", tName, tItem.Summary())
                 }
                 return fmt.Errorf("実行するタスク名を指定してください")
             }
@@ -431,13 +431,18 @@ var projectRunCmd = &cobra.Command{
         if !ok {
             ui.Warn("タスク '%s' はプロジェクト '%s' に定義されていません。利用可能タスク一覧:", taskName, proj.Name)
             for tName, tItem := range proj.Tasks {
-                fmt.Printf("  %-15s %s\n", tName, tItem.Description)
+                fmt.Printf("  %-15s %s\n", tName, tItem.Summary())
             }
             return fmt.Errorf("タスクが未定義です")
         }
 
+        cmds := task.GetCommands()
+        if len(cmds) == 0 {
+            return fmt.Errorf("タスク '%s' に実行可能なコマンドが定義されていません", taskName)
+        }
+
         ui.Info("プロジェクト '%s' でタスク '%s' を実行中...", proj.Name, taskName)
-        return composeClient.RunShellTask(proj.WorkDir, task.Command)
+        return composeClient.RunShellTasks(proj.WorkDir, cmds)
     },
 }
 

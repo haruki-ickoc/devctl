@@ -9,7 +9,7 @@
 - **共通基盤の統合制御 (`devctl core`)**: リバースプロキシや共通 DB などの共通コンテナをどこからでも一発で起動・停止。
 - **共通ネットワークの自動担保 (`devctl network`)**: プロジェクトやコアサービスの起動時に、必要な Docker ネットワークの存在確認と自動作成を実施。
 - **プロジェクト横断の Docker Compose 操作 (`devctl project` / `devctl up`)**: 任意のカレントディレクトリから対象プロジェクト名を指定して一元管理。
-- **Makefile の共通化・吸収 (`devctl run`)**: 各リポジトリに散乱しがちなログ確認やシェル起動などのタスクを設定ファイル (`config.yaml`) に集約。
+- **Makefile の共通化・吸収 (`devctl run`)**: 各リポジトリに散乱しがちなログ確認やシェル起動、初期セットアップ等の複数コマンド連続実行タスクを設定ファイル (`config.yaml`) に集約。
 - **Compose Override 自動マージ & 環境別切り替え (`-f`)**: `compose.override.yml` の自動認識・マージに加え、本番用構成 (`compose.prod.yml`) への切り替えを `-f / --file` フラグで自在に実行可能。
 - **コンテキスト自動判定**: プロジェクトのリポジトリディレクトリに移動している場合は、プロジェクト名の指定を自動で省略可能。
 
@@ -129,6 +129,8 @@ devctl project logs -f catchUper
 devctl project exec catchUper backend sh
 
 # 設定ファイルに定義されたカスタムタスク（旧 Makefile 処理）を実行
+# （単一コマンドだけでなく、リストで定義された複数コマンドの順次実行にも対応）
+devctl run sample setup
 devctl run catchUper logs
 devctl run catchUper backend-sh
 
@@ -145,6 +147,27 @@ devctl build sample -f compose.prod.yml
 >
 > - **`devctl pull` / `devctl core pull`**: Compose ファイルの `image:` で指定されたコンテナイメージをレジストリから取得します（コンテナの起動・再作成は行いません）。
 > - **`devctl build --pull`**: `build:` 定義を持つサービスの `Dockerfile` 内で参照しているベースイメージ（`FROM`）の最新版をプルした上で、イメージをビルドします。
+
+> **カスタムタスク (`tasks`) における複数コマンドのリスト定義**:
+>
+> - 1つのタスクに複数のコマンドをリスト形式で定義すると、定義した順番に順次実行されます（途中でコマンドが失敗した場合は即座に後続の実行を停止する Fail-Fast 仕様です）。
+> - 各コマンドは `sh -c` 経由で実行されるため、コマンド文字列内に引数や環境変数を直接記述できます。
+>
+> ```yaml
+> tasks:
+>   # リスト直書き形式
+>   setup:
+>     - "docker compose exec app composer install"
+>     - "docker compose exec app php artisan migrate"
+>     - "docker compose exec app php artisan db:seed"
+>
+>   # description 付き複数コマンド形式
+>   test-all:
+>     description: "Unit / Feature テストを順次実行"
+>     commands:
+>       - "docker compose exec -e APP_ENV=testing app php artisan test --testsuite=Unit"
+>       - "docker compose exec -e APP_ENV=testing app php artisan test --testsuite=Feature"
+> ```
 
 > **`up / down` と `start / stop` の使い分け**:
 >

@@ -53,6 +53,11 @@ projects:
         - "traefik"
         - "dbgate"
     tasks:
+      # 複数コマンドをリストで定義すると、定義順に順次実行されます（途中で失敗した場合は即時停止します）
+      setup:
+        - "docker compose exec app composer install"
+        - "docker compose exec app php artisan migrate"
+        - "docker compose exec app php artisan db:seed"
       migrate:
         description: "データベースマイグレーションの実行"
         command: "docker compose exec app php artisan migrate"

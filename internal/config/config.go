@@ -68,8 +68,107 @@ type DependsOnConfig struct {
 
 // TaskItem はプロジェクト固有のカスタムタスク（Makefile代替コマンド）を定義します。
 type TaskItem struct {
-    Description string `yaml:"description"`
-    Command     string `yaml:"command"`
+    Description string   `yaml:"description,omitempty"`
+    Command     string   `yaml:"command,omitempty"`
+    Commands    []string `yaml:"commands,omitempty"`
+}
+
+// GetCommands はタスクに定義された実行対象コマンド一覧を返します。
+func (t TaskItem) GetCommands() []string {
+    var result []string
+    if len(t.Commands) > 0 {
+        for _, cmd := range t.Commands {
+            if strings.TrimSpace(cmd) != "" {
+                result = append(result, cmd)
+            }
+        }
+        return result
+    }
+    if strings.TrimSpace(t.Command) != "" {
+        return []string{t.Command}
+    }
+    return nil
+}
+
+// Summary はタスク一覧表示用の説明文（Description が未設定の場合はコマンド列の要約）を返します。
+func (t TaskItem) Summary() string {
+    if t.Description != "" {
+        return t.Description
+    }
+    return strings.Join(t.GetCommands(), " && ")
+}
+
+// UnmarshalYAML は単一コマンド文字列、コマンド配列（直リスト）、およびマップ定義（command / commands）のすべてをパースします。
+func (t *TaskItem) UnmarshalYAML(value *yaml.Node) error {
+    switch value.Kind {
+    case yaml.ScalarNode:
+        var single string
+        if err := value.Decode(&single); err != nil {
+            return err
+        }
+        t.Command = single
+        if single != "" {
+            t.Commands = []string{single}
+        }
+        return nil
+
+    case yaml.SequenceNode:
+        var list []string
+        if err := value.Decode(&list); err != nil {
+            return fmt.Errorf("tasks のコマンドリスト定義が不正です: %w", err)
+        }
+        t.Commands = list
+        if len(list) == 1 {
+            t.Command = list[0]
+        }
+        return nil
+
+    case yaml.MappingNode:
+        var raw struct {
+            Description string    `yaml:"description"`
+            Command     yaml.Node `yaml:"command"`
+            Commands    []string  `yaml:"commands"`
+        }
+        if err := value.Decode(&raw); err != nil {
+            return err
+        }
+        t.Description = raw.Description
+        if len(raw.Commands) > 0 {
+            t.Commands = raw.Commands
+            if len(raw.Commands) == 1 {
+                t.Command = raw.Commands[0]
+            }
+            return nil
+        }
+        if raw.Command.Kind != 0 {
+            switch raw.Command.Kind {
+            case yaml.ScalarNode:
+                var single string
+                if err := raw.Command.Decode(&single); err != nil {
+                    return err
+                }
+                t.Command = single
+                if single != "" {
+                    t.Commands = []string{single}
+                }
+            case yaml.SequenceNode:
+                var list []string
+                if err := raw.Command.Decode(&list); err != nil {
+                    return fmt.Errorf("task.command のリスト定義が不正です: %w", err)
+                }
+                t.Commands = list
+                if len(list) == 1 {
+                    t.Command = list[0]
+                }
+            default:
+                return fmt.Errorf("task.command には文字列または文字列リストを指定してください")
+            }
+        }
+        return nil
+
+    default:
+        return fmt.Errorf("不正な task 定義形式です")
+    }
 }
 
 // candidateComposeFiles は Compose ファイル自動検出時の候補ファイル名一覧（優先順位順）です。

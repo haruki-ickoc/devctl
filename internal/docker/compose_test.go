@@ -254,3 +254,56 @@ func TestComposeClient_EnsureServicesRunning(t *testing.T) {
         }
     })
 }
+
+func TestComposeClient_RunShellTasks(t *testing.T) {
+    t.Run("複数コマンドが定義順に実行されること", func(t *testing.T) {
+        runner := NewRunner(false, false)
+        client := NewComposeClient(runner, "docker compose")
+        tempDir := t.TempDir()
+        outFile := filepath.Join(tempDir, "order.txt")
+
+        cmds := []string{
+            "echo step1 >> " + outFile,
+            "STEP_VAR=step2 sh -c 'echo $STEP_VAR >> " + outFile + "'",
+            "echo step3 >> " + outFile,
+        }
+        if err := client.RunShellTasks(tempDir, cmds); err != nil {
+            t.Fatalf("RunShellTasks の実行に失敗しました: %v", err)
+        }
+
+        data, err := os.ReadFile(outFile)
+        if err != nil {
+            t.Fatalf("結果ファイルの読み込みに失敗しました: %v", err)
+        }
+        expected := "step1\nstep2\nstep3\n"
+        if string(data) != expected {
+            t.Errorf("実行順序の不一致: 期待値 %q, 実際 %q", expected, string(data))
+        }
+    })
+
+    t.Run("途中のコマンドが失敗した場合は即時中断(Fail-Fast)し後続コマンドが実行されないこと", func(t *testing.T) {
+        runner := NewRunner(false, false)
+        client := NewComposeClient(runner, "docker compose")
+        tempDir := t.TempDir()
+        outFile := filepath.Join(tempDir, "failfast.txt")
+
+        cmds := []string{
+            "echo first >> " + outFile,
+            "exit 1",
+            "echo third >> " + outFile,
+        }
+        err := client.RunShellTasks(tempDir, cmds)
+        if err == nil {
+            t.Fatalf("途中コマンドの失敗時にエラーが返されませんでした")
+        }
+
+        data, readErr := os.ReadFile(outFile)
+        if readErr != nil {
+            t.Fatalf("結果ファイルの読み込みに失敗しました: %v", readErr)
+        }
+        expected := "first\n"
+        if string(data) != expected {
+            t.Errorf("Fail-Fast 検証失敗: 後続コマンドが実行された可能性があります。期待値 %q, 実際 %q", expected, string(data))
+        }
+    })
+}
