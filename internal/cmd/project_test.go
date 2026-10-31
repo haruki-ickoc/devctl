@@ -348,3 +348,52 @@ func TestPullCmd_Execution(t *testing.T) {
         }
     })
 }
+
+func TestRunCmd_MultiCommandExecution(t *testing.T) {
+    dryRun = true
+    verbose = false
+    runner = docker.NewRunner(true, false)
+    composeClient = docker.NewComposeClient(runner, "docker compose")
+
+    projDir := t.TempDir()
+    cfg = &config.Config{
+        Defaults: config.DefaultsConfig{
+            ComposeCmd: "docker compose",
+        },
+        Projects: map[string]config.ProjectItem{
+            "test-app": {
+                Name:         "test-app",
+                WorkDir:      projDir,
+                ComposeFiles: []string{"compose.yml"},
+                Tasks: map[string]config.TaskItem{
+                    "single": {
+                        Description: "単一タスク",
+                        Command:     "echo one",
+                    },
+                    "multi": {
+                        Commands: []string{"echo one", "echo two", "echo three"},
+                    },
+                    "empty": {},
+                },
+            },
+        },
+    }
+
+    t.Run("単一コマンドおよび複数コマンドのタスクが正常にDryRun実行できること", func(t *testing.T) {
+        if err := projectRunCmd.RunE(projectRunCmd, []string{"test-app", "single"}); err != nil {
+            t.Fatalf("単一コマンドタスクの実行に失敗しました: %v", err)
+        }
+        if err := topRunCmd.RunE(topRunCmd, []string{"test-app", "multi"}); err != nil {
+            t.Fatalf("複数コマンドタスクの実行に失敗しました: %v", err)
+        }
+    })
+
+    t.Run("空タスクや未定義タスクでエラーになること", func(t *testing.T) {
+        if err := topRunCmd.RunE(topRunCmd, []string{"test-app", "empty"}); err == nil {
+            t.Errorf("空タスクでエラーが発生しませんでした")
+        }
+        if err := topRunCmd.RunE(topRunCmd, []string{"test-app", "not-found"}); err == nil {
+            t.Errorf("未定義タスクでエラーが発生しませんでした")
+        }
+    })
+}

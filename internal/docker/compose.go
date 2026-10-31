@@ -258,6 +258,26 @@ func (c *ComposeClient) RunShellTask(workDir, shellCommand string) error {
     return c.runner.RunShell(workDir, shellCommand)
 }
 
+// RunShellTasks は設定ファイルで定義された1つまたは複数のカスタムタスクコマンドを定義順に実行します。
+// 途中でコマンドが失敗した場合は後続のコマンドを実行せず即座に中断（Fail-Fast）します。
+func (c *ComposeClient) RunShellTasks(workDir string, commands []string) error {
+    if len(commands) == 0 {
+        return fmt.Errorf("実行するコマンドが定義されていません")
+    }
+    if len(commands) == 1 {
+        return c.RunShellTask(workDir, commands[0])
+    }
+
+    total := len(commands)
+    for i, cmdStr := range commands {
+        ui.Step("[%d/%d] カスタムタスクを実行中: %s", i+1, total, cmdStr)
+        if err := c.runner.RunShell(workDir, cmdStr); err != nil {
+            return fmt.Errorf("タスクのステップ [%d/%d] (%s) の実行に失敗しました: %w", i+1, total, cmdStr, err)
+        }
+    }
+    return nil
+}
+
 // findMissingServices は要求されたサービス一覧のうち、稼働中サービス一覧に含まれていないものを抽出します。
 func findMissingServices(required, running []string) []string {
     runningSet := make(map[string]bool, len(running))

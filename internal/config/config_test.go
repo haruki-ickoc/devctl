@@ -3,6 +3,7 @@ package config
 import (
     "os"
     "path/filepath"
+    "reflect"
     "testing"
 )
 
@@ -210,5 +211,97 @@ defaults:
     if _, err := ValidateFile(filepath.Join(tempDir, "not_exist.yaml")); err == nil {
         t.Errorf("存在しないファイルでエラーが発生しませんでした")
     }
+}
+
+func TestTaskItem_UnmarshalYAML(t *testing.T) {
+    tempDir := t.TempDir()
+    tasksYAML := `version: "1"
+projects:
+  sample:
+    workdir: "~/workspace/sample"
+    tasks:
+      single-map:
+        description: "単一コマンド定義"
+        command: "docker compose exec app php artisan migrate"
+      multi-seq:
+        - "docker compose exec app composer install"
+        - "docker compose exec app php artisan migrate"
+        - "docker compose exec app php artisan db:seed"
+      multi-map-commands:
+        description: "複数コマンド定義 (commands)"
+        commands:
+          - "cmd-1 --flag"
+          - "ENV_VAR=1 cmd-2"
+      multi-map-command-list:
+        description: "複数コマンド定義 (command リスト)"
+        command:
+          - "step-a"
+          - "step-b"
+      single-scalar: "echo hello"
+`
+    cfgPath := filepath.Join(tempDir, "tasks.yaml")
+    if err := os.WriteFile(cfgPath, []byte(tasksYAML), 0644); err != nil {
+        t.Fatal(err)
+    }
+
+    cfg, err := ValidateFile(cfgPath)
+    if err != nil {
+        t.Fatalf("tasks.yaml のパースに失敗しました: %v", err)
+    }
+
+    tasks := cfg.Projects["sample"].Tasks
+
+    t.Run("既存の単一コマンド形式 (description + command) がパースできること", func(t *testing.T) {
+        item := tasks["single-map"]
+        if item.Description != "単一コマンド定義" {
+            t.Errorf("Description 不一致: %s", item.Description)
+        }
+        expected := []string{"docker compose exec app php artisan migrate"}
+        if !reflect.DeepEqual(item.GetCommands(), expected) {
+            t.Errorf("GetCommands 不一致: 期待値 %v, 実際 %v", expected, item.GetCommands())
+        }
+    })
+
+    t.Run("Issue #11 の直リスト形式 (tasks.<name> 直下の配列) が定義順にパースできること", func(t *testing.T) {
+        item := tasks["multi-seq"]
+        expected := []string{
+            "docker compose exec app composer install",
+            "docker compose exec app php artisan migrate",
+            "docker compose exec app php artisan db:seed",
+        }
+        if !reflect.DeepEqual(item.GetCommands(), expected) {
+            t.Errorf("GetCommands 不一致: 期待値 %v, 実際 %v", expected, item.GetCommands())
+        }
+        if item.Summary() == "" {
+            t.Errorf("Description 未設定時の Summary() が空です")
+        }
+    })
+
+    t.Run("description 付きの commands 配列形式が定義順にパースできること", func(t *testing.T) {
+        item := tasks["multi-map-commands"]
+        if item.Description != "複数コマンド定義 (commands)" {
+            t.Errorf("Description 不一致: %s", item.Description)
+        }
+        expected := []string{"cmd-1 --flag", "ENV_VAR=1 cmd-2"}
+        if !reflect.DeepEqual(item.GetCommands(), expected) {
+            t.Errorf("GetCommands 不一致: 期待値 %v, 実際 %v", expected, item.GetCommands())
+        }
+    })
+
+    t.Run("command キーに配列を指定した形式もパースできること", func(t *testing.T) {
+        item := tasks["multi-map-command-list"]
+        expected := []string{"step-a", "step-b"}
+        if !reflect.DeepEqual(item.GetCommands(), expected) {
+            t.Errorf("GetCommands 不一致: 期待値 %v, 実際 %v", expected, item.GetCommands())
+        }
+    })
+
+    t.Run("スカラー文字列直書き形式もパースできること", func(t *testing.T) {
+        item := tasks["single-scalar"]
+        expected := []string{"echo hello"}
+        if !reflect.DeepEqual(item.GetCommands(), expected) {
+            t.Errorf("GetCommands 不一致: 期待値 %v, 実際 %v", expected, item.GetCommands())
+        }
+    })
 }
 

@@ -52,7 +52,12 @@ projects:
         - "database"
         - "redis"
     # 各プロジェクト固有のタスク（Makefile 代替コマンド）
+    # 単一コマンド (description + command) または複数コマンドのリスト定義が可能です
     tasks:
+      setup:
+        - "docker compose exec app npm install"
+        - "docker compose exec app npm run migrate"
+        - "docker compose exec app npm run seed"
       migrate:
         description: "データベースマイグレーションの実行"
         command: "docker compose exec app npm run migrate"
