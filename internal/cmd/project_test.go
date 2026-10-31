@@ -1,6 +1,8 @@
 package cmd
 
 import (
+    "os"
+    "path/filepath"
     "testing"
 
     "github.com/spf13/cobra"
@@ -396,4 +398,45 @@ func TestRunCmd_MultiCommandExecution(t *testing.T) {
             t.Errorf("未定義タスクでエラーが発生しませんでした")
         }
     })
+}
+
+func TestUpCmd_WithBuildEnvOverride(t *testing.T) {
+    dryRun = true
+    verbose = false
+    runner = docker.NewRunner(true, false)
+    composeClient = docker.NewComposeClient(runner, "docker compose")
+
+    projDir := t.TempDir()
+    dockerDir := filepath.Join(projDir, "_docker")
+    if err := os.MkdirAll(dockerDir, 0755); err != nil {
+        t.Fatal(err)
+    }
+    if err := os.WriteFile(filepath.Join(projDir, ".env"), []byte("BUILD_ENV=local\n"), 0644); err != nil {
+        t.Fatal(err)
+    }
+    if err := os.WriteFile(filepath.Join(dockerDir, "compose.yaml"), []byte(""), 0644); err != nil {
+        t.Fatal(err)
+    }
+    if err := os.WriteFile(filepath.Join(dockerDir, "compose.local.yaml"), []byte(""), 0644); err != nil {
+        t.Fatal(err)
+    }
+
+    cfg = &config.Config{
+        Defaults: config.DefaultsConfig{
+            ComposeCmd: "docker compose",
+        },
+        Projects: map[string]config.ProjectItem{
+            "petfood": {
+                Name:         "petfood",
+                WorkDir:      projDir,
+                ComposeFiles: []string{"_docker/compose.yaml"},
+            },
+        },
+    }
+
+    projectComposeFiles = nil
+    projectBuild = false
+    if err := topUpCmd.RunE(topUpCmd, []string{"petfood"}); err != nil {
+        t.Fatalf("BUILD_ENV=local 環境での devctl up petfood に失敗しました: %v", err)
+    }
 }

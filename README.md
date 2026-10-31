@@ -10,7 +10,7 @@
 - **共通ネットワークの自動担保 (`devctl network`)**: プロジェクトやコアサービスの起動時に、必要な Docker ネットワークの存在確認と自動作成を実施。
 - **プロジェクト横断の Docker Compose 操作 (`devctl project` / `devctl up`)**: 任意のカレントディレクトリから対象プロジェクト名を指定して一元管理。
 - **Makefile の共通化・吸収 (`devctl run`)**: 各リポジトリに散乱しがちなログ確認やシェル起動、初期セットアップ等の複数コマンド連続実行タスクを設定ファイル (`config.yaml`) に集約。
-- **Compose Override 自動マージ & 環境別切り替え (`-f`)**: `compose.override.yml` の自動認識・マージに加え、本番用構成 (`compose.prod.yml`) への切り替えを `-f / --file` フラグで自在に実行可能。
+- **Compose Override 自動マージ & 環境別切り替え (`BUILD_ENV` / `-f`)**: `.env` の `BUILD_ENV` に応じた環境別 override（例: `compose.local.yaml`）や標準 `compose.override.yml` の自動認識・マージに加え、`-f / --file` フラグでの明示的な切り替えにも対応。
 - **コンテキスト自動判定**: プロジェクトのリポジトリディレクトリに移動している場合は、プロジェクト名の指定を自動で省略可能。
 
 ---
@@ -174,10 +174,11 @@ devctl build sample -f compose.prod.yml
 > - **`up` / `down`**: コンテナの新規作成（Create）および削除（Remove）を伴います。初回起動時や `compose.yml`・`.env` の設定変更を反映したい場合に使用します。
 > - **`start` / `stop`**: 既存コンテナを削除せずに一時停止（Exited）および再開します。コンテナ再作成コストがかからないため、作業の一時中断・メモリ節約・特定サービスの休止と超高速な再開に適しています。
 
-> **Docker Compose Override の自動マージと環境切り替え**:
+> **Docker Compose Override の自動マージと環境切り替え (`BUILD_ENV` / `-f`)**:
 >
-> - 通常実行時（`-f` 未指定時）は、プロジェクト作業ディレクトリ内の `compose.override.yml`（または `docker-compose.override.yml` 等）が自動認識・マージされ、開発用設定（マルチステージの `dev` ターゲット、ボリュームマウント等）が有効化されます。
-> - `-f compose.prod.yml` などの追加ファイルを指定すると、開発用 override は自動的に除外され、指定したファイルがベース Compose ファイルに重ねて適用されます。
+> - **`.env` の `BUILD_ENV` による自動適用**: プロジェクトの `.env`（または `env_file`）に `BUILD_ENV=local` 等が定義されている場合、ベース Compose ファイルと同じディレクトリ内の `compose.<BUILD_ENV>.yaml`（または `.yml` / `docker-compose.<BUILD_ENV>.*`、例: `_docker/compose.local.yaml`）が自動検出され、`-f` 指定なしでベース定義と合わせて適用されます（異なる環境の override や標準 `compose.override.yml` が誤って適用されることはありません）。
+> - **標準 Override の自動マージ**: `BUILD_ENV` が未設定かつ `-f` 未指定時は、プロジェクト作業ディレクトリ内の `compose.override.yml`（または `docker-compose.override.yml` 等）が自動認識・マージされます。
+> - **CLI フラグによる明示指定 (`-f` / `--file`)**: `-f compose.prod.yml` などの追加ファイルを指定すると、自動 override は除外され、指定したファイルが最優先でベース Compose ファイルに重ねて適用されます。
 
 > **共通基盤（Core）の生存検証と自動起動**:
 >

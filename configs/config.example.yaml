@@ -40,8 +40,9 @@ projects:
   sample:
     description: "サンプルアプリケーション環境 (Laravel + MySQL)"
     # compose_files は省略時は自動検出されます。
-    # 作業ディレクトリ内に compose.override.yml が存在する場合は自動マージされます。
-    # 本番用 (compose.prod.yml 等) への一時切り替えは CLI フラグ (devctl up sample -f compose.prod.yml や devctl build sample -f compose.prod.yml) で指定可能です。
+    # .env に BUILD_ENV (例: BUILD_ENV=local) が定義されている場合は、対応する compose.<BUILD_ENV>.yaml (例: compose.local.yaml) が自動適用されます。
+    # BUILD_ENV 未設定時は、作業ディレクトリ内に compose.override.yml が存在すれば自動マージされます。
+    # CLI フラグ (devctl up sample -f compose.prod.yml 等) を指定した場合は、そのファイルが最優先で適用されます。
     compose_files:
       - "compose.yml"
     env_file: "_docker/.env"

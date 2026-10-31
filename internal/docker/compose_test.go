@@ -92,6 +92,112 @@ func TestBuildBaseArgs(t *testing.T) {
             t.Errorf("引数の不一致: 期待値 %v, 実際 %v", expected, args)
         }
     })
+
+    t.Run(".envのBUILD_ENV=localに応じて_docker/compose.local.yamlが自動適用されること", func(t *testing.T) {
+        tempDir := t.TempDir()
+        dockerDir := filepath.Join(tempDir, "_docker")
+        if err := os.MkdirAll(dockerDir, 0755); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(tempDir, ".env"), []byte("APP_NAME=petfood\nBUILD_ENV=local\n"), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(dockerDir, "compose.yaml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(dockerDir, "compose.local.yaml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+
+        opts := ComposeOptions{
+            WorkDir:      tempDir,
+            ComposeFiles: []string{"_docker/compose.yaml"},
+        }
+        _, args := client.buildBaseArgs(opts)
+        expected := []string{"compose", "-f", "_docker/compose.yaml", "-f", "_docker/compose.local.yaml"}
+        if !reflect.DeepEqual(args, expected) {
+            t.Errorf("引数の不一致: 期待値 %v, 実際 %v", expected, args)
+        }
+    })
+
+    t.Run("BUILD_ENVが異なる環境のoverrideや標準compose.override.ymlを誤って適用しないこと", func(t *testing.T) {
+        tempDir := t.TempDir()
+        if err := os.WriteFile(filepath.Join(tempDir, ".env"), []byte("BUILD_ENV=staging\n"), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(tempDir, "compose.yaml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+        // local 用および標準 override が存在していても、staging 用がなければ適用されないこと
+        if err := os.WriteFile(filepath.Join(tempDir, "compose.local.yaml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(tempDir, "compose.override.yaml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+
+        opts := ComposeOptions{
+            WorkDir:      tempDir,
+            ComposeFiles: []string{"compose.yaml", "compose.override.yaml"},
+        }
+        _, args := client.buildBaseArgs(opts)
+        expected := []string{"compose", "-f", "compose.yaml"}
+        if !reflect.DeepEqual(args, expected) {
+            t.Errorf("異なる環境のoverrideが誤適用されました: 期待値 %v, 実際 %v", expected, args)
+        }
+    })
+
+    t.Run("BUILD_ENVが設定されていても--file指定時は指定ファイルが優先されること", func(t *testing.T) {
+        tempDir := t.TempDir()
+        if err := os.WriteFile(filepath.Join(tempDir, ".env"), []byte("BUILD_ENV=local\n"), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(tempDir, "compose.yaml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(tempDir, "compose.local.yaml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+
+        opts := ComposeOptions{
+            WorkDir:            tempDir,
+            ComposeFiles:       []string{"compose.yaml"},
+            CustomComposeFiles: []string{"compose.prod.yaml"},
+        }
+        _, args := client.buildBaseArgs(opts)
+        expected := []string{"compose", "-f", "compose.yaml", "-f", "compose.prod.yaml"}
+        if !reflect.DeepEqual(args, expected) {
+            t.Errorf("引数の不一致: 期待値 %v, 実際 %v", expected, args)
+        }
+    })
+
+    t.Run("opts.EnvFileに定義されたBUILD_ENVも読み取れること", func(t *testing.T) {
+        tempDir := t.TempDir()
+        dockerDir := filepath.Join(tempDir, "_docker")
+        if err := os.MkdirAll(dockerDir, 0755); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(dockerDir, ".env"), []byte("export BUILD_ENV=\"local\" # comment\n"), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(tempDir, "compose.yml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(tempDir, "compose.local.yml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+
+        opts := ComposeOptions{
+            WorkDir:      tempDir,
+            ComposeFiles: []string{"compose.yml"},
+            EnvFile:      "_docker/.env",
+        }
+        _, args := client.buildBaseArgs(opts)
+        expected := []string{"compose", "-f", "compose.yml", "-f", "compose.local.yml", "--env-file", "_docker/.env"}
+        if !reflect.DeepEqual(args, expected) {
+            t.Errorf("引数の不一致: 期待値 %v, 実際 %v", expected, args)
+        }
+    })
 }
 
 func TestComposeClient_Build(t *testing.T) {
