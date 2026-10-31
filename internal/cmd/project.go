@@ -147,6 +147,34 @@ var projectBuildCmd = &cobra.Command{
     },
 }
 
+var projectPullCmd = &cobra.Command{
+    Use:   "pull [project-name] [services...]",
+    Short: "プロジェクトコンテナイメージを取得",
+    Long: `指定されたプロジェクトのコンテナイメージをレジストリから取得します（コンテナの起動・再作成は行いません）。
+特定のサービスのみを対象にイメージを取得することも可能です。`,
+    RunE: func(cmd *cobra.Command, args []string) error {
+        proj, remainingArgs, err := resolveTargetProject(args)
+        if err != nil {
+            return err
+        }
+
+        opts := docker.ComposeOptions{
+            WorkDir:            proj.WorkDir,
+            ComposeFiles:       proj.ComposeFiles,
+            CustomComposeFiles: projectComposeFiles,
+            EnvFile:            proj.EnvFile,
+            Services:           remainingArgs,
+        }
+
+        if err := composeClient.Pull(opts); err != nil {
+            return fmt.Errorf("プロジェクト '%s' のイメージ取得に失敗しました: %w", proj.Name, err)
+        }
+
+        ui.Success("プロジェクト '%s' のイメージ取得が正常に完了しました。", proj.Name)
+        return nil
+    },
+}
+
 var projectUpCmd = &cobra.Command{
     Use:   "up [project-name] [services...]",
     Short: "プロジェクトコンテナを起動",
@@ -420,6 +448,11 @@ var (
         Short: "'project build' の短縮エイリアス",
         RunE:  projectBuildCmd.RunE,
     }
+    topPullCmd = &cobra.Command{
+        Use:   "pull [project-name] [services...]",
+        Short: "'project pull' の短縮エイリアス",
+        RunE:  projectPullCmd.RunE,
+    }
     topUpCmd = &cobra.Command{
         Use:   "up [project-name] [services...]",
         Short: "'project up' の短縮エイリアス",
@@ -466,6 +499,7 @@ func init() {
     RootCmd.AddCommand(projectCmd)
     projectCmd.AddCommand(projectListCmd)
     projectCmd.AddCommand(projectBuildCmd)
+    projectCmd.AddCommand(projectPullCmd)
     projectCmd.AddCommand(projectUpCmd)
     projectCmd.AddCommand(projectDownCmd)
     projectCmd.AddCommand(projectStartCmd)
@@ -478,6 +512,7 @@ func init() {
 
     // トップレベルエイリアスをルートに追加
     RootCmd.AddCommand(topBuildCmd)
+    RootCmd.AddCommand(topPullCmd)
     RootCmd.AddCommand(topUpCmd)
     RootCmd.AddCommand(topDownCmd)
     RootCmd.AddCommand(topStartCmd)
@@ -514,6 +549,7 @@ func init() {
     // Compose ファイルの追加・上書きフラグ (-f / --file)
     composeFileFlags := []*cobra.Command{
         projectBuildCmd, topBuildCmd,
+        projectPullCmd, topPullCmd,
         projectUpCmd, topUpCmd,
         projectDownCmd, topDownCmd,
         projectStartCmd, topStartCmd,

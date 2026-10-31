@@ -22,6 +22,38 @@ var coreCmd = &cobra.Command{
     Long:  `各プロジェクトが横断して利用する共通インフラ基盤のコンテナ群を管理します。`,
 }
 
+var corePullCmd = &cobra.Command{
+    Use:   "pull [services...]",
+    Short: "共通基盤コンテナイメージを取得",
+    Long: `共通基盤（Core）のコンテナイメージをレジストリから取得します（コンテナの起動・再作成は行いません）。
+特定のサービスのみを対象にイメージを取得することも可能です。`,
+    RunE: func(cmd *cobra.Command, args []string) error {
+        if cfg.Core.WorkDir == "" {
+            return fmt.Errorf("config.yaml に core.workdir が設定されていません")
+        }
+
+        if !dryRun {
+            if _, err := os.Stat(cfg.Core.WorkDir); os.IsNotExist(err) {
+                return fmt.Errorf("共通基盤の作業ディレクトリが存在しません: %s", cfg.Core.WorkDir)
+            }
+        }
+
+        opts := docker.ComposeOptions{
+            WorkDir:      cfg.Core.WorkDir,
+            ComposeFiles: cfg.Core.ComposeFiles,
+            EnvFile:      cfg.Core.EnvFile,
+            Services:     args,
+        }
+
+        if err := composeClient.Pull(opts); err != nil {
+            return fmt.Errorf("共通基盤のイメージ取得に失敗しました: %w", err)
+        }
+
+        ui.Success("共通基盤のイメージ取得が正常に完了しました。")
+        return nil
+    },
+}
+
 var coreUpCmd = &cobra.Command{
     Use:   "up [services...]",
     Short: "共通基盤コンテナを起動",
@@ -142,6 +174,7 @@ var coreLogsCmd = &cobra.Command{
 
 func init() {
     RootCmd.AddCommand(coreCmd)
+    coreCmd.AddCommand(corePullCmd)
     coreCmd.AddCommand(coreUpCmd)
     coreCmd.AddCommand(coreDownCmd)
     coreCmd.AddCommand(coreRestartCmd)

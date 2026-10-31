@@ -123,6 +123,47 @@ func TestComposeClient_Build(t *testing.T) {
     })
 }
 
+func TestComposeClient_Pull(t *testing.T) {
+    runner := NewRunner(true, false) // DryRun: true
+    client := NewComposeClient(runner, "docker compose")
+
+    t.Run("通常のPull実行がDryRunで正常終了すること", func(t *testing.T) {
+        opts := ComposeOptions{
+            WorkDir:      t.TempDir(),
+            ComposeFiles: []string{"compose.yml"},
+            EnvFile:      ".env",
+        }
+        if err := client.Pull(opts); err != nil {
+            t.Errorf("Pullの実行に失敗しました: %v", err)
+        }
+    })
+
+    t.Run("サービス指定およびカスタムComposeファイル指定時のPullがDryRunで正常終了すること", func(t *testing.T) {
+        opts := ComposeOptions{
+            WorkDir:            t.TempDir(),
+            ComposeFiles:       []string{"compose.yml"},
+            CustomComposeFiles: []string{"compose.prod.yml"},
+            EnvFile:            ".env.prod",
+            Services:           []string{"app", "db"},
+        }
+        if err := client.Pull(opts); err != nil {
+            t.Errorf("Pullの実行に失敗しました: %v", err)
+        }
+    })
+
+    t.Run("コマンド実行失敗時にエラーが伝播すること", func(t *testing.T) {
+        failRunner := NewRunner(false, false)
+        failClient := NewComposeClient(failRunner, "false")
+        opts := ComposeOptions{
+            WorkDir:      t.TempDir(),
+            ComposeFiles: []string{"compose.yml"},
+        }
+        if err := failClient.Pull(opts); err == nil {
+            t.Errorf("コマンド失敗時にエラーが返されませんでした")
+        }
+    })
+}
+
 func TestComposeClient_StartAndStop(t *testing.T) {
     runner := NewRunner(true, false) // DryRun: true
     client := NewComposeClient(runner, "docker compose")

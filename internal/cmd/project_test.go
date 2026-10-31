@@ -242,3 +242,109 @@ func TestPrepareDependencies_WithCoreAndNetwork(t *testing.T) {
         }
     })
 }
+
+func TestPullCmd_FlagsAndRegistration(t *testing.T) {
+    // RootCmd への pull 短縮コマンド登録確認
+    foundTop := false
+    for _, c := range RootCmd.Commands() {
+        if c.Name() == "pull" {
+            foundTop = true
+            break
+        }
+    }
+    if !foundTop {
+        t.Errorf("RootCmd に 'pull' コマンドが登録されていません")
+    }
+
+    // projectCmd 配下の pull 登録確認
+    foundProjectPull := false
+    for _, c := range projectCmd.Commands() {
+        if c.Name() == "pull" {
+            foundProjectPull = true
+            break
+        }
+    }
+    if !foundProjectPull {
+        t.Errorf("projectCmd に 'pull' サブコマンドが登録されていません")
+    }
+
+    // coreCmd 配下の pull 登録確認
+    foundCorePull := false
+    for _, c := range coreCmd.Commands() {
+        if c.Name() == "pull" {
+            foundCorePull = true
+            break
+        }
+    }
+    if !foundCorePull {
+        t.Errorf("coreCmd に 'pull' サブコマンドが登録されていません")
+    }
+
+    // projectPullCmd / topPullCmd の -f / --file フラグ確認
+    for _, c := range []*cobra.Command{projectPullCmd, topPullCmd} {
+        if c.Flag("file") == nil {
+            t.Errorf("コマンド '%s' に -f/--file フラグが存在しません", c.Name())
+        }
+    }
+}
+
+func TestPullCmd_Execution(t *testing.T) {
+    dryRun = true
+    verbose = false
+    runner = docker.NewRunner(true, false)
+    composeClient = docker.NewComposeClient(runner, "docker compose")
+
+    coreDir := t.TempDir()
+    projDir := t.TempDir()
+
+    cfg = &config.Config{
+        Defaults: config.DefaultsConfig{
+            ComposeCmd: "docker compose",
+        },
+        Core: config.CoreConfig{
+            WorkDir:      coreDir,
+            ComposeFiles: []string{"compose.yml"},
+            EnvFile:      ".env",
+        },
+        Projects: map[string]config.ProjectItem{
+            "test-app": {
+                Name:         "test-app",
+                WorkDir:      projDir,
+                ComposeFiles: []string{"compose.yml"},
+                EnvFile:      "_docker/.env",
+            },
+        },
+    }
+
+    t.Run("プロジェクト指定で全サービスまたは指定サービスのPullがDryRun実行できること", func(t *testing.T) {
+        projectComposeFiles = nil
+        if err := projectPullCmd.RunE(projectPullCmd, []string{"test-app"}); err != nil {
+            t.Fatalf("projectPullCmd の実行に失敗しました: %v", err)
+        }
+
+        projectComposeFiles = []string{"compose.prod.yml"}
+        if err := topPullCmd.RunE(topPullCmd, []string{"test-app", "app", "db"}); err != nil {
+            t.Fatalf("topPullCmd の実行に失敗しました: %v", err)
+        }
+    })
+
+    t.Run("Coreで全サービスおよび指定サービスのPullがDryRun実行できること", func(t *testing.T) {
+        if err := corePullCmd.RunE(corePullCmd, nil); err != nil {
+            t.Fatalf("corePullCmd (全サービス) の実行に失敗しました: %v", err)
+        }
+        if err := corePullCmd.RunE(corePullCmd, []string{"traefik", "dbgate"}); err != nil {
+            t.Fatalf("corePullCmd (サービス指定) の実行に失敗しました: %v", err)
+        }
+    })
+
+    t.Run("存在しないプロジェクトまたはcore.workdir未設定時にエラーになること", func(t *testing.T) {
+        if err := topPullCmd.RunE(topPullCmd, []string{"unknown-project"}); err == nil {
+            t.Errorf("存在しないプロジェクトでエラーが発生しませんでした")
+        }
+
+        cfg.Core.WorkDir = ""
+        if err := corePullCmd.RunE(corePullCmd, nil); err == nil {
+            t.Errorf("core.workdir 未設定時にエラーが発生しませんでした")
+        }
+    })
+}
