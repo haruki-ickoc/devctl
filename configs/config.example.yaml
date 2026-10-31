@@ -8,7 +8,8 @@ defaults:
   env_file: ".env"
 
 # 共通 Docker ネットワーク定義
-# devctl は共通基盤やプロジェクト起動前にこのネットワークの存在を確認し、なければ自動作成します
+# devctl は共通基盤やプロジェクト起動前にこのネットワークの存在を確認し、なければ自動作成します。
+# Docker Compose 互換ラベルを付与して作成するため、core ディレクトリ直下での `docker compose up -d` とも競合せず相互運用可能です。
 network:
   name: "internal-network"
   driver: "bridge"
