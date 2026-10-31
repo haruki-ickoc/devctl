@@ -138,6 +138,17 @@ func (c *ComposeClient) Build(opts ComposeOptions, noCache, pull bool) error {
     return c.runner.RunCommand(opts.WorkDir, bin, args...)
 }
 
+// Pull は指定されたサービスのコンテナイメージを取得します（コンテナの起動・再作成は行いません）。
+func (c *ComposeClient) Pull(opts ComposeOptions) error {
+    bin, baseArgs := c.buildBaseArgs(opts)
+    args := append(baseArgs, "pull")
+    args = append(args, opts.Services...)
+    args = append(args, opts.ExtraArgs...)
+
+    ui.Step("%s でイメージを取得中...", opts.WorkDir)
+    return c.runner.RunCommand(opts.WorkDir, bin, args...)
+}
+
 // Up はサービスをバックグラウンド（デタッチドモード）で起動します。
 func (c *ComposeClient) Up(opts ComposeOptions, build bool) error {
     bin, baseArgs := c.buildBaseArgs(opts)

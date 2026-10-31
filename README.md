@@ -61,6 +61,10 @@ devctl/
 # 共通ネットワークを自動確認・作成した上で共通基盤を起動
 devctl core up
 
+# 共通基盤のコンテナイメージを事前取得（コンテナは起動しません）
+devctl core pull
+devctl core pull traefik dbgate
+
 # 共通基盤ディレクトリ (toolbox/) 直下で Docker Compose から直接起動・停止することも可能
 # （どちらの方法で起動・操作しても完全に相互互換で動作します）
 cd ~/workspace/toolbox && docker compose up -d
@@ -102,6 +106,11 @@ devctl build sample front app
 # キャッシュを無効化してビルド / ベースイメージを強制プル
 devctl build sample --no-cache --pull
 
+# プロジェクトのコンテナイメージをレジストリから取得（コンテナは起動しません）
+devctl project pull sample  # または devctl pull sample
+devctl pull sample app db
+devctl pull sample -f compose.prod.yml
+
 # プロジェクトを停止・破棄（コンテナ削除）
 devctl project down sample  # または devctl down sample
 
@@ -130,7 +139,12 @@ devctl build sample -f compose.prod.yml
 ```
 
 > **カレントディレクトリの自動判定**:
-> プロジェクトの作業ディレクトリに移動している場合、`devctl up` や `devctl stop`、`devctl run logs` のようにプロジェクト名の引数を省略して実行できます。
+> プロジェクトの作業ディレクトリに移動している場合、`devctl up` や `devctl pull`、`devctl stop`、`devctl run logs` のようにプロジェクト名の引数を省略して実行できます。
+
+> **`pull` と `build --pull` の使い分け**:
+>
+> - **`devctl pull` / `devctl core pull`**: Compose ファイルの `image:` で指定されたコンテナイメージをレジストリから取得します（コンテナの起動・再作成は行いません）。
+> - **`devctl build --pull`**: `build:` 定義を持つサービスの `Dockerfile` 内で参照しているベースイメージ（`FROM`）の最新版をプルした上で、イメージをビルドします。
 
 > **`up / down` と `start / stop` の使い分け**:
 >
