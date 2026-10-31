@@ -1,6 +1,8 @@
 package cmd
 
 import (
+    "os"
+    "path/filepath"
     "testing"
 
     "github.com/spf13/cobra"
@@ -239,6 +241,365 @@ func TestPrepareDependencies_WithCoreAndNetwork(t *testing.T) {
         err := projectUpCmd.RunE(projectUpCmd, []string{"dep-app"})
         if err == nil {
             t.Errorf("core.workdir 未設定時にエラーが発生しませんでした")
+        }
+    })
+}
+
+func TestPullCmd_FlagsAndRegistration(t *testing.T) {
+    // RootCmd への pull 短縮コマンド登録確認
+    foundTop := false
+    for _, c := range RootCmd.Commands() {
+        if c.Name() == "pull" {
+            foundTop = true
+            break
+        }
+    }
+    if !foundTop {
+        t.Errorf("RootCmd に 'pull' コマンドが登録されていません")
+    }
+
+    // projectCmd 配下の pull 登録確認
+    foundProjectPull := false
+    for _, c := range projectCmd.Commands() {
+        if c.Name() == "pull" {
+            foundProjectPull = true
+            break
+        }
+    }
+    if !foundProjectPull {
+        t.Errorf("projectCmd に 'pull' サブコマンドが登録されていません")
+    }
+
+    // coreCmd 配下の pull 登録確認
+    foundCorePull := false
+    for _, c := range coreCmd.Commands() {
+        if c.Name() == "pull" {
+            foundCorePull = true
+            break
+        }
+    }
+    if !foundCorePull {
+        t.Errorf("coreCmd に 'pull' サブコマンドが登録されていません")
+    }
+
+    // projectPullCmd / topPullCmd の -f / --file フラグ確認
+    for _, c := range []*cobra.Command{projectPullCmd, topPullCmd} {
+        if c.Flag("file") == nil {
+            t.Errorf("コマンド '%s' に -f/--file フラグが存在しません", c.Name())
+        }
+    }
+}
+
+func TestPullCmd_Execution(t *testing.T) {
+    dryRun = true
+    verbose = false
+    runner = docker.NewRunner(true, false)
+    composeClient = docker.NewComposeClient(runner, "docker compose")
+
+    coreDir := t.TempDir()
+    projDir := t.TempDir()
+
+    cfg = &config.Config{
+        Defaults: config.DefaultsConfig{
+            ComposeCmd: "docker compose",
+        },
+        Core: config.CoreConfig{
+            WorkDir:      coreDir,
+            ComposeFiles: []string{"compose.yml"},
+            EnvFile:      ".env",
+        },
+        Projects: map[string]config.ProjectItem{
+            "test-app": {
+                Name:         "test-app",
+                WorkDir:      projDir,
+                ComposeFiles: []string{"compose.yml"},
+                EnvFile:      "_docker/.env",
+            },
+        },
+    }
+
+    t.Run("プロジェクト指定で全サービスまたは指定サービスのPullがDryRun実行できること", func(t *testing.T) {
+        projectComposeFiles = nil
+        if err := projectPullCmd.RunE(projectPullCmd, []string{"test-app"}); err != nil {
+            t.Fatalf("projectPullCmd の実行に失敗しました: %v", err)
+        }
+
+        projectComposeFiles = []string{"compose.prod.yml"}
+        if err := topPullCmd.RunE(topPullCmd, []string{"test-app", "app", "db"}); err != nil {
+            t.Fatalf("topPullCmd の実行に失敗しました: %v", err)
+        }
+    })
+
+    t.Run("Coreで全サービスおよび指定サービスのPullがDryRun実行できること", func(t *testing.T) {
+        if err := corePullCmd.RunE(corePullCmd, nil); err != nil {
+            t.Fatalf("corePullCmd (全サービス) の実行に失敗しました: %v", err)
+        }
+        if err := corePullCmd.RunE(corePullCmd, []string{"traefik", "dbgate"}); err != nil {
+            t.Fatalf("corePullCmd (サービス指定) の実行に失敗しました: %v", err)
+        }
+    })
+
+    t.Run("存在しないプロジェクトまたはcore.workdir未設定時にエラーになること", func(t *testing.T) {
+        if err := topPullCmd.RunE(topPullCmd, []string{"unknown-project"}); err == nil {
+            t.Errorf("存在しないプロジェクトでエラーが発生しませんでした")
+        }
+
+        cfg.Core.WorkDir = ""
+        if err := corePullCmd.RunE(corePullCmd, nil); err == nil {
+            t.Errorf("core.workdir 未設定時にエラーが発生しませんでした")
+        }
+    })
+}
+
+func TestRunCmd_MultiCommandExecution(t *testing.T) {
+    dryRun = true
+    verbose = false
+    runner = docker.NewRunner(true, false)
+    composeClient = docker.NewComposeClient(runner, "docker compose")
+
+    projDir := t.TempDir()
+    cfg = &config.Config{
+        Defaults: config.DefaultsConfig{
+            ComposeCmd: "docker compose",
+        },
+        Projects: map[string]config.ProjectItem{
+            "test-app": {
+                Name:         "test-app",
+                WorkDir:      projDir,
+                ComposeFiles: []string{"compose.yml"},
+                Tasks: map[string]config.TaskItem{
+                    "single": {
+                        Description: "単一タスク",
+                        Command:     "echo one",
+                    },
+                    "multi": {
+                        Commands: []string{"echo one", "echo two", "echo three"},
+                    },
+                    "empty": {},
+                },
+            },
+        },
+    }
+
+    t.Run("単一コマンドおよび複数コマンドのタスクが正常にDryRun実行できること", func(t *testing.T) {
+        if err := projectRunCmd.RunE(projectRunCmd, []string{"test-app", "single"}); err != nil {
+            t.Fatalf("単一コマンドタスクの実行に失敗しました: %v", err)
+        }
+        if err := topRunCmd.RunE(topRunCmd, []string{"test-app", "multi"}); err != nil {
+            t.Fatalf("複数コマンドタスクの実行に失敗しました: %v", err)
+        }
+    })
+
+    t.Run("空タスクや未定義タスクでエラーになること", func(t *testing.T) {
+        if err := topRunCmd.RunE(topRunCmd, []string{"test-app", "empty"}); err == nil {
+            t.Errorf("空タスクでエラーが発生しませんでした")
+        }
+        if err := topRunCmd.RunE(topRunCmd, []string{"test-app", "not-found"}); err == nil {
+            t.Errorf("未定義タスクでエラーが発生しませんでした")
+        }
+    })
+}
+
+func TestUpCmd_WithBuildEnvOverride(t *testing.T) {
+    dryRun = true
+    verbose = false
+    runner = docker.NewRunner(true, false)
+    composeClient = docker.NewComposeClient(runner, "docker compose")
+
+    projDir := t.TempDir()
+    dockerDir := filepath.Join(projDir, "_docker")
+    if err := os.MkdirAll(dockerDir, 0755); err != nil {
+        t.Fatal(err)
+    }
+    if err := os.WriteFile(filepath.Join(projDir, ".env"), []byte("BUILD_ENV=local\n"), 0644); err != nil {
+        t.Fatal(err)
+    }
+    if err := os.WriteFile(filepath.Join(dockerDir, "compose.yaml"), []byte(""), 0644); err != nil {
+        t.Fatal(err)
+    }
+    if err := os.WriteFile(filepath.Join(dockerDir, "compose.local.yaml"), []byte(""), 0644); err != nil {
+        t.Fatal(err)
+    }
+
+    cfg = &config.Config{
+        Defaults: config.DefaultsConfig{
+            ComposeCmd: "docker compose",
+        },
+        Projects: map[string]config.ProjectItem{
+            "petfood": {
+                Name:         "petfood",
+                WorkDir:      projDir,
+                ComposeFiles: []string{"_docker/compose.yaml"},
+            },
+        },
+    }
+
+    projectComposeFiles = nil
+    projectBuild = false
+    if err := topUpCmd.RunE(topUpCmd, []string{"petfood"}); err != nil {
+        t.Fatalf("BUILD_ENV=local 環境での devctl up petfood に失敗しました: %v", err)
+    }
+}
+
+func TestBackupRestoreCmd_FlagsAndRegistration(t *testing.T) {
+    // RootCmd にはトップレベル短縮形 (backup / restore) が登録されていないことを確認
+    for _, target := range []string{"backup", "restore"} {
+        for _, c := range RootCmd.Commands() {
+            if c.Name() == target {
+                t.Errorf("RootCmd に不要なトップレベル短縮コマンド '%s' が登録されています", target)
+            }
+        }
+    }
+
+    // projectCmd 配下の backup / restore 登録確認
+    for _, target := range []string{"backup", "restore"} {
+        found := false
+        for _, c := range projectCmd.Commands() {
+            if c.Name() == target {
+                found = true
+                break
+            }
+        }
+        if !found {
+            t.Errorf("projectCmd に '%s' サブコマンドが登録されていません", target)
+        }
+    }
+
+    // coreCmd 配下の backup / restore / start / stop 登録確認
+    for _, target := range []string{"backup", "restore", "start", "stop"} {
+        found := false
+        for _, c := range coreCmd.Commands() {
+            if c.Name() == target {
+                found = true
+                break
+            }
+        }
+        if !found {
+            t.Errorf("coreCmd に '%s' サブコマンドが登録されていません", target)
+        }
+    }
+
+    // フラグ確認
+    if projectBackupCmd.Flag("output") == nil {
+        t.Errorf("projectBackupCmd に -o/--output フラグが存在しません")
+    }
+    if projectBackupCmd.Flag("file") == nil {
+        t.Errorf("projectBackupCmd に -f/--file フラグが存在しません")
+    }
+    if projectRestoreCmd.Flag("yes") == nil {
+        t.Errorf("projectRestoreCmd に -y/--yes フラグが存在しません")
+    }
+    if projectRestoreCmd.Flag("file") == nil {
+        t.Errorf("projectRestoreCmd に -f/--file フラグが存在しません")
+    }
+    if coreBackupCmd.Flag("output") == nil {
+        t.Errorf("coreBackupCmd に -o/--output フラグが存在しません")
+    }
+    if coreRestoreCmd.Flag("yes") == nil {
+        t.Errorf("coreRestoreCmd に -y/--yes フラグが存在しません")
+    }
+}
+
+func TestBackupRestoreCmd_Execution(t *testing.T) {
+    dryRun = true
+    verbose = false
+    runner = docker.NewRunner(true, false)
+    composeClient = docker.NewComposeClient(runner, "docker compose")
+    networkManager = docker.NewNetworkManager(runner)
+
+    coreDir := t.TempDir()
+    projDir := t.TempDir()
+
+    coreCompose := `name: toolbox
+volumes:
+    dbgate-data:
+    dozzle-data:
+`
+    projCompose := `name: sample
+volumes:
+    db-data:
+    app-data:
+`
+    if err := os.WriteFile(filepath.Join(coreDir, "compose.yml"), []byte(coreCompose), 0644); err != nil {
+        t.Fatal(err)
+    }
+    if err := os.WriteFile(filepath.Join(projDir, "compose.yml"), []byte(projCompose), 0644); err != nil {
+        t.Fatal(err)
+    }
+
+    cfg = &config.Config{
+        Defaults: config.DefaultsConfig{
+            ComposeCmd: "docker compose",
+        },
+        Core: config.CoreConfig{
+            WorkDir:      coreDir,
+            ComposeFiles: []string{"compose.yml"},
+        },
+        Projects: map[string]config.ProjectItem{
+            "sample": {
+                Name:         "sample",
+                WorkDir:      projDir,
+                ComposeFiles: []string{"compose.yml"},
+            },
+        },
+    }
+
+    t.Run("project backup / restore が全ボリュームおよび指定ボリュームでDryRun実行できること", func(t *testing.T) {
+        projectComposeFiles = nil
+        projectBackupOutput = ""
+        projectRestoreYes = true
+
+        if err := projectBackupCmd.RunE(projectBackupCmd, []string{"sample"}); err != nil {
+            t.Fatalf("projectBackupCmd (全ボリューム) failed: %v", err)
+        }
+        if err := projectBackupCmd.RunE(projectBackupCmd, []string{"sample", "db-data"}); err != nil {
+            t.Fatalf("projectBackupCmd (ボリューム指定) failed: %v", err)
+        }
+
+        dummyArchive := filepath.Join(projDir, ".devctl", "backups", "dummy.tar.gz")
+        if err := projectRestoreCmd.RunE(projectRestoreCmd, []string{"sample", dummyArchive}); err != nil {
+            t.Fatalf("projectRestoreCmd (全ボリューム) failed: %v", err)
+        }
+        if err := projectRestoreCmd.RunE(projectRestoreCmd, []string{"sample", dummyArchive, "db-data"}); err != nil {
+            t.Fatalf("projectRestoreCmd (ボリューム指定) failed: %v", err)
+        }
+    })
+
+    t.Run("project backup / restore でスコープ外のボリューム指定や引数不足はエラーになること", func(t *testing.T) {
+        if err := projectBackupCmd.RunE(projectBackupCmd, []string{"sample", "invalid-vol"}); err == nil {
+            t.Errorf("スコープ外ボリューム指定時にエラーになりませんでした")
+        }
+        if err := projectRestoreCmd.RunE(projectRestoreCmd, []string{"sample"}); err == nil {
+            t.Errorf("アーカイブ未指定時にエラーになりませんでした")
+        }
+    })
+
+    t.Run("core start / stop / backup / restore がDryRun実行できること", func(t *testing.T) {
+        coreBackupOutput = ""
+        coreRestoreYes = true
+
+        if err := coreStopCmd.RunE(coreStopCmd, nil); err != nil {
+            t.Fatalf("coreStopCmd failed: %v", err)
+        }
+        if err := coreBackupCmd.RunE(coreBackupCmd, []string{"dbgate-data"}); err != nil {
+            t.Fatalf("coreBackupCmd failed: %v", err)
+        }
+        dummyCoreArchive := filepath.Join(coreDir, ".devctl", "backups", "core-dummy.tar.gz")
+        if err := coreRestoreCmd.RunE(coreRestoreCmd, []string{dummyCoreArchive, "dbgate-data"}); err != nil {
+            t.Fatalf("coreRestoreCmd failed: %v", err)
+        }
+        if err := coreStartCmd.RunE(coreStartCmd, nil); err != nil {
+            t.Fatalf("coreStartCmd failed: %v", err)
+        }
+    })
+
+    t.Run("core restore でスコープ外ボリューム指定や引数不足はエラーになること", func(t *testing.T) {
+        dummyCoreArchive := filepath.Join(coreDir, ".devctl", "backups", "core-dummy.tar.gz")
+        if err := coreRestoreCmd.RunE(coreRestoreCmd, []string{dummyCoreArchive, "unknown-vol"}); err == nil {
+            t.Errorf("coreRestoreCmd: スコープ外ボリューム指定時にエラーになりませんでした")
+        }
+        if err := coreRestoreCmd.RunE(coreRestoreCmd, nil); err == nil {
+            t.Errorf("coreRestoreCmd: アーカイブ未指定時にエラーになりませんでした")
         }
     })
 }

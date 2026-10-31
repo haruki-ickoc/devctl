@@ -92,6 +92,112 @@ func TestBuildBaseArgs(t *testing.T) {
             t.Errorf("引数の不一致: 期待値 %v, 実際 %v", expected, args)
         }
     })
+
+    t.Run(".envのBUILD_ENV=localに応じて_docker/compose.local.yamlが自動適用されること", func(t *testing.T) {
+        tempDir := t.TempDir()
+        dockerDir := filepath.Join(tempDir, "_docker")
+        if err := os.MkdirAll(dockerDir, 0755); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(tempDir, ".env"), []byte("APP_NAME=petfood\nBUILD_ENV=local\n"), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(dockerDir, "compose.yaml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(dockerDir, "compose.local.yaml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+
+        opts := ComposeOptions{
+            WorkDir:      tempDir,
+            ComposeFiles: []string{"_docker/compose.yaml"},
+        }
+        _, args := client.buildBaseArgs(opts)
+        expected := []string{"compose", "-f", "_docker/compose.yaml", "-f", "_docker/compose.local.yaml"}
+        if !reflect.DeepEqual(args, expected) {
+            t.Errorf("引数の不一致: 期待値 %v, 実際 %v", expected, args)
+        }
+    })
+
+    t.Run("BUILD_ENVが異なる環境のoverrideや標準compose.override.ymlを誤って適用しないこと", func(t *testing.T) {
+        tempDir := t.TempDir()
+        if err := os.WriteFile(filepath.Join(tempDir, ".env"), []byte("BUILD_ENV=staging\n"), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(tempDir, "compose.yaml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+        // local 用および標準 override が存在していても、staging 用がなければ適用されないこと
+        if err := os.WriteFile(filepath.Join(tempDir, "compose.local.yaml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(tempDir, "compose.override.yaml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+
+        opts := ComposeOptions{
+            WorkDir:      tempDir,
+            ComposeFiles: []string{"compose.yaml", "compose.override.yaml"},
+        }
+        _, args := client.buildBaseArgs(opts)
+        expected := []string{"compose", "-f", "compose.yaml"}
+        if !reflect.DeepEqual(args, expected) {
+            t.Errorf("異なる環境のoverrideが誤適用されました: 期待値 %v, 実際 %v", expected, args)
+        }
+    })
+
+    t.Run("BUILD_ENVが設定されていても--file指定時は指定ファイルが優先されること", func(t *testing.T) {
+        tempDir := t.TempDir()
+        if err := os.WriteFile(filepath.Join(tempDir, ".env"), []byte("BUILD_ENV=local\n"), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(tempDir, "compose.yaml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(tempDir, "compose.local.yaml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+
+        opts := ComposeOptions{
+            WorkDir:            tempDir,
+            ComposeFiles:       []string{"compose.yaml"},
+            CustomComposeFiles: []string{"compose.prod.yaml"},
+        }
+        _, args := client.buildBaseArgs(opts)
+        expected := []string{"compose", "-f", "compose.yaml", "-f", "compose.prod.yaml"}
+        if !reflect.DeepEqual(args, expected) {
+            t.Errorf("引数の不一致: 期待値 %v, 実際 %v", expected, args)
+        }
+    })
+
+    t.Run("opts.EnvFileに定義されたBUILD_ENVも読み取れること", func(t *testing.T) {
+        tempDir := t.TempDir()
+        dockerDir := filepath.Join(tempDir, "_docker")
+        if err := os.MkdirAll(dockerDir, 0755); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(dockerDir, ".env"), []byte("export BUILD_ENV=\"local\" # comment\n"), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(tempDir, "compose.yml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+        if err := os.WriteFile(filepath.Join(tempDir, "compose.local.yml"), []byte(""), 0644); err != nil {
+            t.Fatal(err)
+        }
+
+        opts := ComposeOptions{
+            WorkDir:      tempDir,
+            ComposeFiles: []string{"compose.yml"},
+            EnvFile:      "_docker/.env",
+        }
+        _, args := client.buildBaseArgs(opts)
+        expected := []string{"compose", "-f", "compose.yml", "-f", "compose.local.yml", "--env-file", "_docker/.env"}
+        if !reflect.DeepEqual(args, expected) {
+            t.Errorf("引数の不一致: 期待値 %v, 実際 %v", expected, args)
+        }
+    })
 }
 
 func TestComposeClient_Build(t *testing.T) {
@@ -119,6 +225,47 @@ func TestComposeClient_Build(t *testing.T) {
         err := client.Build(opts, true, true)
         if err != nil {
             t.Errorf("Buildの実行に失敗しました: %v", err)
+        }
+    })
+}
+
+func TestComposeClient_Pull(t *testing.T) {
+    runner := NewRunner(true, false) // DryRun: true
+    client := NewComposeClient(runner, "docker compose")
+
+    t.Run("通常のPull実行がDryRunで正常終了すること", func(t *testing.T) {
+        opts := ComposeOptions{
+            WorkDir:      t.TempDir(),
+            ComposeFiles: []string{"compose.yml"},
+            EnvFile:      ".env",
+        }
+        if err := client.Pull(opts); err != nil {
+            t.Errorf("Pullの実行に失敗しました: %v", err)
+        }
+    })
+
+    t.Run("サービス指定およびカスタムComposeファイル指定時のPullがDryRunで正常終了すること", func(t *testing.T) {
+        opts := ComposeOptions{
+            WorkDir:            t.TempDir(),
+            ComposeFiles:       []string{"compose.yml"},
+            CustomComposeFiles: []string{"compose.prod.yml"},
+            EnvFile:            ".env.prod",
+            Services:           []string{"app", "db"},
+        }
+        if err := client.Pull(opts); err != nil {
+            t.Errorf("Pullの実行に失敗しました: %v", err)
+        }
+    })
+
+    t.Run("コマンド実行失敗時にエラーが伝播すること", func(t *testing.T) {
+        failRunner := NewRunner(false, false)
+        failClient := NewComposeClient(failRunner, "false")
+        opts := ComposeOptions{
+            WorkDir:      t.TempDir(),
+            ComposeFiles: []string{"compose.yml"},
+        }
+        if err := failClient.Pull(opts); err == nil {
+            t.Errorf("コマンド失敗時にエラーが返されませんでした")
         }
     })
 }
@@ -210,6 +357,59 @@ func TestComposeClient_EnsureServicesRunning(t *testing.T) {
         }
         if err := client.EnsureServicesRunning(opts); err != nil {
             t.Errorf("EnsureServicesRunning の実行に失敗しました: %v", err)
+        }
+    })
+}
+
+func TestComposeClient_RunShellTasks(t *testing.T) {
+    t.Run("複数コマンドが定義順に実行されること", func(t *testing.T) {
+        runner := NewRunner(false, false)
+        client := NewComposeClient(runner, "docker compose")
+        tempDir := t.TempDir()
+        outFile := filepath.Join(tempDir, "order.txt")
+
+        cmds := []string{
+            "echo step1 >> " + outFile,
+            "STEP_VAR=step2 sh -c 'echo $STEP_VAR >> " + outFile + "'",
+            "echo step3 >> " + outFile,
+        }
+        if err := client.RunShellTasks(tempDir, cmds); err != nil {
+            t.Fatalf("RunShellTasks の実行に失敗しました: %v", err)
+        }
+
+        data, err := os.ReadFile(outFile)
+        if err != nil {
+            t.Fatalf("結果ファイルの読み込みに失敗しました: %v", err)
+        }
+        expected := "step1\nstep2\nstep3\n"
+        if string(data) != expected {
+            t.Errorf("実行順序の不一致: 期待値 %q, 実際 %q", expected, string(data))
+        }
+    })
+
+    t.Run("途中のコマンドが失敗した場合は即時中断(Fail-Fast)し後続コマンドが実行されないこと", func(t *testing.T) {
+        runner := NewRunner(false, false)
+        client := NewComposeClient(runner, "docker compose")
+        tempDir := t.TempDir()
+        outFile := filepath.Join(tempDir, "failfast.txt")
+
+        cmds := []string{
+            "echo first >> " + outFile,
+            "exit 1",
+            "echo third >> " + outFile,
+        }
+        err := client.RunShellTasks(tempDir, cmds)
+        if err == nil {
+            t.Fatalf("途中コマンドの失敗時にエラーが返されませんでした")
+        }
+
+        data, readErr := os.ReadFile(outFile)
+        if readErr != nil {
+            t.Fatalf("結果ファイルの読み込みに失敗しました: %v", readErr)
+        }
+        expected := "first\n"
+        if string(data) != expected {
+            t.Errorf("Fail-Fast 検証失敗: 後続コマンドが実行された可能性があります。期待値 %q, 実際 %q", expected, string(data))
         }
     })
 }

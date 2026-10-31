@@ -20,6 +20,8 @@ var (
     projectFollowLogs    bool
     projectTailLogs      string
     projectComposeFiles  []string
+    projectBackupOutput  string
+    projectRestoreYes    bool
 )
 
 var projectCmd = &cobra.Command{
@@ -143,6 +145,34 @@ var projectBuildCmd = &cobra.Command{
         }
 
         ui.Success("プロジェクト '%s' のイメージビルドが正常に完了しました。", proj.Name)
+        return nil
+    },
+}
+
+var projectPullCmd = &cobra.Command{
+    Use:   "pull [project-name] [services...]",
+    Short: "プロジェクトコンテナイメージを取得",
+    Long: `指定されたプロジェクトのコンテナイメージをレジストリから取得します（コンテナの起動・再作成は行いません）。
+特定のサービスのみを対象にイメージを取得することも可能です。`,
+    RunE: func(cmd *cobra.Command, args []string) error {
+        proj, remainingArgs, err := resolveTargetProject(args)
+        if err != nil {
+            return err
+        }
+
+        opts := docker.ComposeOptions{
+            WorkDir:            proj.WorkDir,
+            ComposeFiles:       proj.ComposeFiles,
+            CustomComposeFiles: projectComposeFiles,
+            EnvFile:            proj.EnvFile,
+            Services:           remainingArgs,
+        }
+
+        if err := composeClient.Pull(opts); err != nil {
+            return fmt.Errorf("プロジェクト '%s' のイメージ取得に失敗しました: %w", proj.Name, err)
+        }
+
+        ui.Success("プロジェクト '%s' のイメージ取得が正常に完了しました。", proj.Name)
         return nil
     },
 }
@@ -378,7 +408,7 @@ var projectRunCmd = &cobra.Command{
                 // プロジェクト内で定義済みのタスク一覧を表示
                 ui.Info("プロジェクト '%s' の利用可能タスク一覧:", p.Name)
                 for tName, tItem := range p.Tasks {
-                    fmt.Printf("  %-15s %s\n", tName, tItem.Description)
+                    fmt.Printf("  %-15s %s\n", tName, tItem.Summary())
                 }
                 return fmt.Errorf("実行するタスク名を指定してください")
             }
@@ -403,13 +433,88 @@ var projectRunCmd = &cobra.Command{
         if !ok {
             ui.Warn("タスク '%s' はプロジェクト '%s' に定義されていません。利用可能タスク一覧:", taskName, proj.Name)
             for tName, tItem := range proj.Tasks {
-                fmt.Printf("  %-15s %s\n", tName, tItem.Description)
+                fmt.Printf("  %-15s %s\n", tName, tItem.Summary())
             }
             return fmt.Errorf("タスクが未定義です")
         }
 
+        cmds := task.GetCommands()
+        if len(cmds) == 0 {
+            return fmt.Errorf("タスク '%s' に実行可能なコマンドが定義されていません", taskName)
+        }
+
         ui.Info("プロジェクト '%s' でタスク '%s' を実行中...", proj.Name, taskName)
-        return composeClient.RunShellTask(proj.WorkDir, task.Command)
+        return composeClient.RunShellTasks(proj.WorkDir, cmds)
+    },
+}
+
+var projectBackupCmd = &cobra.Command{
+    Use:   "backup [project-name] [volumes...]",
+    Short: "プロジェクトの Named Volume をアーカイブに退避",
+    Long: `指定されたプロジェクトで定義されている Named Volume のデータを .tar.gz アーカイブとして保存します。
+コンテナの削除は行いません。データの整合性を保つため、実行前に 'devctl stop <project>' でコンテナを一時停止してください。`,
+    RunE: func(cmd *cobra.Command, args []string) error {
+        proj, remainingArgs, err := resolveTargetProject(args)
+        if err != nil {
+            return err
+        }
+
+        vopts := docker.VolumeBackupOptions{
+            ComposeOpts: docker.ComposeOptions{
+                WorkDir:            proj.WorkDir,
+                ComposeFiles:       proj.ComposeFiles,
+                CustomComposeFiles: projectComposeFiles,
+                EnvFile:            proj.EnvFile,
+            },
+            ScopeType:     "project",
+            ScopeName:     proj.Name,
+            TargetVolumes: remainingArgs,
+            ArchivePath:   projectBackupOutput,
+        }
+
+        if _, err := composeClient.BackupVolumes(vopts); err != nil {
+            return fmt.Errorf("プロジェクト '%s' のボリュームバックアップに失敗しました: %w", proj.Name, err)
+        }
+        return nil
+    },
+}
+
+var projectRestoreCmd = &cobra.Command{
+    Use:   "restore [project-name] <backup> [volumes...]",
+    Short: "バックアップアーカイブからプロジェクトの Named Volume を復元",
+    Long: `指定されたバックアップアーカイブ (.tar.gz) からプロジェクトの Named Volume へデータを復元（上書き）します。
+使用中の Volume への復元による破損を防ぐため、実行前に 'devctl stop <project>' でコンテナを一時停止してください。`,
+    RunE: func(cmd *cobra.Command, args []string) error {
+        proj, remainingArgs, err := resolveTargetProject(args)
+        if err != nil {
+            return err
+        }
+
+        if len(remainingArgs) < 1 {
+            return fmt.Errorf("復元元のバックアップアーカイブファイルを指定してください (使用法: devctl project restore [project-name] <backup> [volumes...])")
+        }
+
+        backupFile := remainingArgs[0]
+        targetVolumes := remainingArgs[1:]
+
+        vopts := docker.VolumeBackupOptions{
+            ComposeOpts: docker.ComposeOptions{
+                WorkDir:            proj.WorkDir,
+                ComposeFiles:       proj.ComposeFiles,
+                CustomComposeFiles: projectComposeFiles,
+                EnvFile:            proj.EnvFile,
+            },
+            ScopeType:     "project",
+            ScopeName:     proj.Name,
+            TargetVolumes: targetVolumes,
+            ArchivePath:   backupFile,
+            AssumeYes:     projectRestoreYes,
+        }
+
+        if err := composeClient.RestoreVolumes(vopts); err != nil {
+            return fmt.Errorf("プロジェクト '%s' のボリューム復元に失敗しました: %w", proj.Name, err)
+        }
+        return nil
     },
 }
 
@@ -419,6 +524,11 @@ var (
         Use:   "build [project-name] [services...]",
         Short: "'project build' の短縮エイリアス",
         RunE:  projectBuildCmd.RunE,
+    }
+    topPullCmd = &cobra.Command{
+        Use:   "pull [project-name] [services...]",
+        Short: "'project pull' の短縮エイリアス",
+        RunE:  projectPullCmd.RunE,
     }
     topUpCmd = &cobra.Command{
         Use:   "up [project-name] [services...]",
@@ -466,6 +576,7 @@ func init() {
     RootCmd.AddCommand(projectCmd)
     projectCmd.AddCommand(projectListCmd)
     projectCmd.AddCommand(projectBuildCmd)
+    projectCmd.AddCommand(projectPullCmd)
     projectCmd.AddCommand(projectUpCmd)
     projectCmd.AddCommand(projectDownCmd)
     projectCmd.AddCommand(projectStartCmd)
@@ -475,9 +586,12 @@ func init() {
     projectCmd.AddCommand(projectLogsCmd)
     projectCmd.AddCommand(projectExecCmd)
     projectCmd.AddCommand(projectRunCmd)
+    projectCmd.AddCommand(projectBackupCmd)
+    projectCmd.AddCommand(projectRestoreCmd)
 
     // トップレベルエイリアスをルートに追加
     RootCmd.AddCommand(topBuildCmd)
+    RootCmd.AddCommand(topPullCmd)
     RootCmd.AddCommand(topUpCmd)
     RootCmd.AddCommand(topDownCmd)
     RootCmd.AddCommand(topStartCmd)
@@ -514,6 +628,7 @@ func init() {
     // Compose ファイルの追加・上書きフラグ (-f / --file)
     composeFileFlags := []*cobra.Command{
         projectBuildCmd, topBuildCmd,
+        projectPullCmd, topPullCmd,
         projectUpCmd, topUpCmd,
         projectDownCmd, topDownCmd,
         projectStartCmd, topStartCmd,
@@ -521,8 +636,13 @@ func init() {
         projectRestartCmd, topRestartCmd,
         projectPsCmd,
         projectExecCmd,
+        projectBackupCmd,
+        projectRestoreCmd,
     }
     for _, f := range composeFileFlags {
         f.Flags().StringSliceVarP(&projectComposeFiles, "file", "f", nil, "追加または上書きで適用する Compose ファイル (例: compose.prod.yml)")
     }
+
+    projectBackupCmd.Flags().StringVarP(&projectBackupOutput, "output", "o", "", "バックアップアーカイブの出力先ファイルパス (省略時: <workdir>/.devctl/backups/<project>-<timestamp>.tar.gz)")
+    projectRestoreCmd.Flags().BoolVarP(&projectRestoreYes, "yes", "y", false, "上書き確認プロンプトをスキップして実行")
 }

@@ -9,12 +9,23 @@ import (
 
 // NetworkManager は Docker ネットワークの作成・存在確認・削除を管理します。
 type NetworkManager struct {
-    runner *Runner
+    runner         *Runner
+    composeProject string
 }
 
 // NewNetworkManager は新しい NetworkManager インスタンスを生成します。
 func NewNetworkManager(runner *Runner) *NetworkManager {
-    return &NetworkManager{runner: runner}
+    return &NetworkManager{
+        runner:         runner,
+        composeProject: "toolbox",
+    }
+}
+
+// SetComposeProject はネットワーク作成時に付与する Docker Compose プロジェクト名を設定します。
+func (n *NetworkManager) SetComposeProject(project string) {
+    if project != "" {
+        n.composeProject = project
+    }
 }
 
 // Exists は指定された名前の Docker ネットワークが存在するか確認します。
@@ -102,8 +113,9 @@ func (n *NetworkManager) warnIfMismatch(name, expectedSubnet, expectedGateway, a
     }
 }
 
-// Create は指定された名前・ドライバ・設定で Docker ネットワークを作成します。
-func (n *NetworkManager) Create(name, driver, subnet, gateway string, attachable bool) error {
+// buildCreateArgs は docker network create に渡す引数スライスを構築します。
+// Docker Compose (docker compose up -d) との相互運用性を担保するため、Compose 互換ラベルを付与します。
+func (n *NetworkManager) buildCreateArgs(name, driver, subnet, gateway string, attachable bool) []string {
     args := []string{"network", "create"}
     if driver != "" {
         args = append(args, "--driver", driver)
@@ -117,7 +129,22 @@ func (n *NetworkManager) Create(name, driver, subnet, gateway string, attachable
     if gateway != "" {
         args = append(args, "--gateway", gateway)
     }
+    project := n.composeProject
+    if project == "" {
+        project = "toolbox"
+    }
+    args = append(args,
+        "--label", fmt.Sprintf("com.docker.compose.network=%s", name),
+        "--label", fmt.Sprintf("com.docker.compose.project=%s", project),
+    )
     args = append(args, name)
+    return args
+}
+
+// Create は指定された名前・ドライバ・設定で Docker ネットワークを作成します。
+// Docker Compose (docker compose up -d) との相互運用性を担保するため、Compose 互換ラベルを付与します。
+func (n *NetworkManager) Create(name, driver, subnet, gateway string, attachable bool) error {
+    args := n.buildCreateArgs(name, driver, subnet, gateway, attachable)
 
     if err := n.runner.RunCommand("", "docker", args...); err != nil {
         return fmt.Errorf("ネットワーク '%s' の作成に失敗しました: %w", name, err)
