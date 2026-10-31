@@ -3,6 +3,7 @@ package cmd
 import (
     "fmt"
     "os"
+    "path/filepath"
 
     "github.com/spf13/cobra"
     "github.com/haruki-ickoc/devctl/internal/config"
@@ -53,6 +54,9 @@ var RootCmd = &cobra.Command{
         // Docker クライアント群の初期化
         composeClient = docker.NewComposeClient(runner, cfg.Defaults.ComposeCmd)
         networkManager = docker.NewNetworkManager(runner)
+        if cfg.Core.WorkDir != "" {
+            networkManager.SetComposeProject(filepath.Base(cfg.Core.WorkDir))
+        }
 
         return nil
     },

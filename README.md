@@ -61,6 +61,10 @@ devctl/
 # 共通ネットワークを自動確認・作成した上で共通基盤を起動
 devctl core up
 
+# 共通基盤ディレクトリ (toolbox/) 直下で Docker Compose から直接起動・停止することも可能
+# （どちらの方法で起動・操作しても完全に相互互換で動作します）
+cd ~/workspace/toolbox && docker compose up -d
+
 # 共通基盤を停止
 devctl core down
 
@@ -73,6 +77,11 @@ devctl core ps
 # 共通基盤のログを確認
 devctl core logs -f
 ```
+
+> **`devctl core up` と `docker compose up -d` の相互運用性**:
+>
+> - 共通基盤（`toolbox/compose.yml`）のネットワーク定義に IPAM（Subnet / Gateway）および `attachable: true` を持たせ、かつ `devctl` のネットワーク自動作成時にも Docker Compose 互換ラベル（`com.docker.compose.network` / `com.docker.compose.project`）を付与します。
+> - これにより、ネットワーク未作成の初期状態からでも `devctl core up` と `toolbox/` 直下での `docker compose up -d` のどちらからでもエラーなく起動でき、起動後の `ps` / `logs` / `down` や各プロジェクトからの接続も双方向で透過的に行えます。
 
 ### 2. プロジェクト操作 (Project Management)
 
