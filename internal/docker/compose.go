@@ -42,6 +42,163 @@ func isOverrideFile(filePath string) bool {
     return strings.Contains(base, ".override.")
 }
 
+// isValidBuildEnv は BUILD_ENV の値が安全な環境識別子（英数字・ハイフン・アンダースコア）かどうかを判定します。
+func isValidBuildEnv(val string) bool {
+    if val == "" {
+        return false
+    }
+    for _, r := range val {
+        if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_') {
+            return false
+        }
+    }
+    return true
+}
+
+// parseBuildEnvFromContent は .env ファイルの内容から BUILD_ENV の値を抽出します。
+func parseBuildEnvFromContent(content string) string {
+    var result string
+    for _, rawLine := range strings.Split(content, "\n") {
+        line := strings.TrimSpace(rawLine)
+        if line == "" || strings.HasPrefix(line, "#") {
+            continue
+        }
+        if strings.HasPrefix(line, "export ") {
+            line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+        }
+        idx := strings.IndexByte(line, '=')
+        if idx < 0 {
+            continue
+        }
+        key := strings.TrimSpace(line[:idx])
+        if key != "BUILD_ENV" {
+            continue
+        }
+        val := strings.TrimSpace(line[idx+1:])
+        if commentIdx := strings.Index(val, " #"); commentIdx >= 0 {
+            val = strings.TrimSpace(val[:commentIdx])
+        }
+        if len(val) >= 2 && ((val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'')) {
+            val = val[1 : len(val)-1]
+        }
+        val = strings.TrimSpace(val)
+        if isValidBuildEnv(val) {
+            result = val
+        }
+    }
+    return result
+}
+
+// resolveBuildEnv は対象プロジェクトの .env ファイル群から BUILD_ENV を読み取ります。
+func resolveBuildEnv(workDir, envFile, baseFile string) string {
+    if workDir == "" {
+        return ""
+    }
+
+    var candidates []string
+    addCandidate := func(p string) {
+        if p == "" {
+            return
+        }
+        full := p
+        if !filepath.IsAbs(full) {
+            full = filepath.Join(workDir, p)
+        }
+        for _, existing := range candidates {
+            if existing == full {
+                return
+            }
+        }
+        candidates = append(candidates, full)
+    }
+
+    if envFile != "" {
+        addCandidate(envFile)
+    }
+    addCandidate(".env")
+    if baseFile != "" {
+        baseDir := filepath.Dir(baseFile)
+        if baseDir != "." && baseDir != "" {
+            addCandidate(filepath.Join(baseDir, ".env"))
+        }
+    }
+
+    for _, path := range candidates {
+        data, err := os.ReadFile(path)
+        if err != nil {
+            continue
+        }
+        if val := parseBuildEnvFromContent(string(data)); val != "" {
+            return val
+        }
+    }
+    return ""
+}
+
+// findEnvOverrideFile はベース Compose ファイルと同じディレクトリ内で BUILD_ENV に対応する override ファイルを探索します。
+func findEnvOverrideFile(workDir, baseFile, buildEnv string) string {
+    if workDir == "" || baseFile == "" || !isValidBuildEnv(buildEnv) {
+        return ""
+    }
+
+    baseDir := filepath.Dir(baseFile)
+    baseName := filepath.Base(baseFile)
+
+    candidateMap := map[string][]string{
+        "compose.yaml":        {"compose." + buildEnv + ".yaml", "compose." + buildEnv + ".yml"},
+        "compose.yml":         {"compose." + buildEnv + ".yml", "compose." + buildEnv + ".yaml"},
+        "docker-compose.yaml": {"docker-compose." + buildEnv + ".yaml", "docker-compose." + buildEnv + ".yml"},
+        "docker-compose.yml":  {"docker-compose." + buildEnv + ".yml", "docker-compose." + buildEnv + ".yaml"},
+    }
+
+    var candidates []string
+    if list, ok := candidateMap[baseName]; ok {
+        candidates = append(candidates, list...)
+    }
+    fallbacks := []string{
+        "compose." + buildEnv + ".yaml",
+        "compose." + buildEnv + ".yml",
+        "docker-compose." + buildEnv + ".yaml",
+        "docker-compose." + buildEnv + ".yml",
+    }
+    for _, fb := range fallbacks {
+        exists := false
+        for _, c := range candidates {
+            if c == fb {
+                exists = true
+                break
+            }
+        }
+        if !exists {
+            candidates = append(candidates, fb)
+        }
+    }
+
+    searchDirs := []string{baseDir}
+    if baseDir == "." || baseDir == "" {
+        searchDirs = append(searchDirs, "_docker")
+    } else {
+        searchDirs = append(searchDirs, ".")
+    }
+
+    for _, dir := range searchDirs {
+        for _, c := range candidates {
+            relPath := c
+            if dir != "." && dir != "" {
+                relPath = filepath.Join(dir, c)
+            }
+            fullPath := relPath
+            if !filepath.IsAbs(fullPath) {
+                fullPath = filepath.Join(workDir, relPath)
+            }
+            if _, err := os.Stat(fullPath); err == nil {
+                return relPath
+            }
+        }
+    }
+    return ""
+}
+
 // findOverrideFile は作業ディレクトリ内でベース Compose ファイルに対応する override ファイルを探索します。
 func findOverrideFile(workDir, baseFile string) string {
     if workDir == "" || baseFile == "" {
@@ -98,18 +255,46 @@ func (c *ComposeClient) buildBaseArgs(opts ComposeOptions) (string, []string) {
             args = append(args, "-f", f)
         }
     } else {
-        // CustomComposeFiles が未指定の場合（通常時）:
-        // 既存の ComposeFiles を適用し、override ファイルが含まれていなければ自動検出して追加
-        hasOverride := false
+        var baseFile string
         for _, f := range opts.ComposeFiles {
-            if isOverrideFile(f) {
-                hasOverride = true
+            if !isOverrideFile(f) {
+                baseFile = f
+                break
             }
-            args = append(args, "-f", f)
         }
-        if !hasOverride && len(opts.ComposeFiles) > 0 && opts.WorkDir != "" {
-            if ov := findOverrideFile(opts.WorkDir, opts.ComposeFiles[0]); ov != "" {
-                args = append(args, "-f", ov)
+
+        buildEnv := resolveBuildEnv(opts.WorkDir, opts.EnvFile, baseFile)
+        if buildEnv != "" {
+            // .env に BUILD_ENV が指定されている場合:
+            // ベースファイルから標準の .override. を除外し、BUILD_ENV に対応する override のみを適用
+            envOverride := findEnvOverrideFile(opts.WorkDir, baseFile, buildEnv)
+            hasEnvOverride := false
+            for _, f := range opts.ComposeFiles {
+                if isOverrideFile(f) {
+                    continue
+                }
+                if envOverride != "" && f == envOverride {
+                    hasEnvOverride = true
+                }
+                args = append(args, "-f", f)
+            }
+            if envOverride != "" && !hasEnvOverride {
+                args = append(args, "-f", envOverride)
+            }
+        } else {
+            // CustomComposeFiles も BUILD_ENV も未指定の場合（通常時）:
+            // 既存の ComposeFiles を適用し、override ファイルが含まれていなければ自動検出して追加
+            hasOverride := false
+            for _, f := range opts.ComposeFiles {
+                if isOverrideFile(f) {
+                    hasOverride = true
+                }
+                args = append(args, "-f", f)
+            }
+            if !hasOverride && len(opts.ComposeFiles) > 0 && opts.WorkDir != "" {
+                if ov := findOverrideFile(opts.WorkDir, opts.ComposeFiles[0]); ov != "" {
+                    args = append(args, "-f", ov)
+                }
             }
         }
     }
